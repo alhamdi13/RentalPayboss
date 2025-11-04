@@ -1,12 +1,108 @@
 <!doctype html>
 <html lang="id">
- <head>
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rental Manager</title>
-  <script src="/_sdk/data_sdk.js"></script>
-  <script src="/_sdk/element_sdk.js"></script>
+  
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Firebase SDK - Ganti SDK yang hilang -->
+  <script type="module">
+    // Impor fungsi-fungsi yang kita butuhkan dari Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      doc, 
+      setDoc, 
+      onSnapshot,
+      query,
+      where,
+      getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // DEFINISI showToast dipindahkan ke atas agar bisa menangani error
+    window.showToast = function(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+      toast.style.color = '#ffffff';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    // -----------------------------------------------------------------
+    // PENTING: Masukkan Konfigurasi Firebase Anda di Sini!
+    // -----------------------------------------------------------------
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyCjRY87p_EzrxkVB7HG13bozEUnf6C-63Y",
+      authDomain: "rental-manager-a4d21.firebaseapp.com",
+      projectId: "rental-manager-a4d21",
+      storageBucket: "rental-manager-a4d21.firebasestorage.app",
+      messagingSenderId: "759463472912",
+      appId: "1:759463472912:web:f209186894c5fc6cb3ff95",
+      measurementId: "G-704L1DTJKT"
+    };
+
+    // Inisialisasi Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    
+    // Buat referensi koleksi
+    const rentalsCollection = collection(db, "rentals");
+
+    // Tempelkan semua kode aplikasi Anda di sini
+    window.db = db;
+    window.auth = auth;
+    window.rentalsCollection = rentalsCollection;
+    window.addDoc = addDoc;
+    window.doc = doc;
+    window.setDoc = setDoc;
+    window.onSnapshot = onSnapshot;
+    window.query = query;
+    window.where = where;
+    window.getDocs = getDocs;
+
+    // Login sebagai anonim untuk mengamankan sesi
+    signInAnonymously(auth).catch((error) => {
+      console.error("Anonymous sign-in failed:", error);
+      // Sekarang showToast sudah terdefinisi
+      showToast('Gagal terhubung ke server', 'error');
+    });
+
+    // Pasang listener untuk data rental
+    function setupRealtimeListener(dataHandler) {
+      const q = query(rentalsCollection);
+      
+      onSnapshot(q, (snapshot) => {
+        const rentals = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          __backendId: doc.id // Kita simpan ID dokumen Firebase
+        }));
+        dataHandler.onDataChanged(rentals);
+      }, (error) => {
+        console.error("Error listening to rentals: ", error);
+        showToast('Gagal memuat data real-time', 'error');
+      });
+    }
+    
+    window.setupRealtimeListener = setupRealtimeListener;
+
+  </script>
+
   <style>
     body {
       box-sizing: border-box;
@@ -50,10 +146,27 @@
 
     .room-card {
       transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.2);
     }
 
     .room-card:hover {
       transform: translateY(-4px);
+      box-shadow: 0 8px 25px rgba(6, 182, 212, 0.2);
+      border-color: rgba(6, 182, 212, 0.4);
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    }
+
+    .gradient-secondary {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .card-shadow {
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .toast {
@@ -143,10 +256,12 @@
     }
   </style>
   <style>@view-transition { navigation: auto; }</style>
- </head>
- <body>
+</head>
+<body>
   <div id="app" class="min-h-full"></div>
-  <script>
+  
+  <script type="module">
+    // KONSTANTA APLIKASI DIPINDAHKAN KE ATAS
     const REFERENCE_ROOMS = [
       { id: 'billiard-1', name: 'Billiard 1', type: 'billiard', icon: '🎱' },
       { id: 'karaoke-1', name: 'Karaoke 1', type: 'karaoke', icon: '🎤' },
@@ -155,12 +270,13 @@
       { id: 'massage-1', name: 'Kursi Pijat', type: 'massage', icon: '💆' }
     ];
 
+    // defaultConfig DIPINDAHKAN KE ATAS (SEBELUM appConfig)
     const defaultConfig = {
-      background_color: '#0f172a',
-      surface_color: '#1e293b',
-      text_color: '#f1f5f9',
-      primary_action_color: '#3b82f6',
-      secondary_action_color: '#64748b',
+      background_color: '#f0f9ff',
+      surface_color: '#ffffff',
+      text_color: '#1e293b',
+      primary_action_color: '#06b6d4',
+      secondary_action_color: '#f59e0b',
       app_title: 'One Stop Entertainment Pay Boss',
       billiard_price: '50000',
       karaoke_price: '75000',
@@ -169,6 +285,102 @@
       font_size: 16,
       user_role: 'kasir'
     };
+
+    // -------------------------------------------------
+    // FAKE SDK IMPLEMENTATION (Menggunakan Firebase)
+    // -------------------------------------------------
+
+    // (1) Pengganti elementSdk
+    const appConfig = (function() {
+      // Coba ambil config tersimpan dari localStorage
+      let savedConfig = {};
+      try {
+        const stored = localStorage.getItem('rentalConfig');
+        if (stored) {
+          savedConfig = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn("Gagal memuat config dari localStorage", e);
+      }
+
+      // Gabungkan dengan defaultConfig (sekarang sudah terdefinisi)
+      let currentConfig = { ...defaultConfig, ...savedConfig };
+
+      return {
+        // Berikan config saat ini
+        get config() {
+          return currentConfig;
+        },
+        // Fungsi untuk menyimpan config baru
+        setConfig(newConfig) {
+          currentConfig = { ...currentConfig, ...newConfig };
+          try {
+            // Simpan ke localStorage agar persisten
+            localStorage.setItem('rentalConfig', JSON.stringify(currentConfig));
+          } catch (e) {
+            console.warn("Gagal menyimpan config ke localStorage", e);
+          }
+          // Panggil onConfigChange secara manual
+          onConfigChange(currentConfig);
+        }
+      };
+    })();
+
+    // (2) Pengganti dataSdk
+    const dataSdk = {
+      // Fungsi untuk membuat data baru di Firestore
+      async create(data) {
+        try {
+          await window.addDoc(window.rentalsCollection, data);
+          return { isOk: true };
+        } catch (error) {
+          console.error("Error creating document: ", error);
+          return { isOk: false, error };
+        }
+      },
+      
+      // Fungsi untuk update data di Firestore
+      async update(rental) {
+        // Ambil ID dokumen dan hapus dari objek
+        const docId = rental.__backendId;
+        if (!docId) {
+          return { isOk: false, error: "Missing document ID" };
+        }
+        
+        // Buat salinan data tanpa __backendId
+        const { __backendId, ...dataToSave } = rental;
+        
+        try {
+          const docRef = window.doc(window.db, "rentals", docId);
+          await window.setDoc(docRef, dataToSave);
+          return { isOk: true };
+        } catch (error) {
+          console.error("Error updating document: ", error);
+          return { isOk: false, error };
+        }
+      },
+      
+      // Fungsi init untuk memulai listener
+      async init(dataHandler) {
+        try {
+          // Atur listener real-time
+          window.setupRealtimeListener(dataHandler);
+          return { isOk: true };
+        } catch (error) {
+          console.error("Error setting up listener: ", error);
+          return { isOk: false, error };
+        }
+      }
+    };
+    
+    // Pasang SDK palsu kita ke window agar kode lama berfungsi
+    window.elementSdk = appConfig;
+    window.dataSdk = dataSdk;
+
+
+    // =================================================
+    // KODE APLIKASI ASLI ANDA (Sisa kode)
+    // =================================================
 
     let allRentals = [];
     let activeTimers = new Map();
@@ -200,18 +412,8 @@
       return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
-    function showToast(message, type = 'success') {
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
-      toast.style.color = '#ffffff';
-      toast.textContent = message;
-      document.body.appendChild(toast);
-      
-      setTimeout(() => {
-        toast.remove();
-      }, 3000);
-    }
+    // FUNGSI showToast TELAH DIPINDAHKAN KE <script> PERTAMA
+    // window.showToast = function(message, type = 'success') { ... }
 
     function calculateDuration(startTime) {
       const now = new Date();
@@ -255,11 +457,14 @@
 
       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
       const pricePerHour = getPriceForRoom(room.type, config);
-      const currentPrice = Math.ceil(duration * pricePerHour);
       
-      const priceEl = card.querySelector('.current-price');
-      if (priceEl) {
-        priceEl.textContent = formatCurrency(currentPrice);
+      // Update harga hanya jika 'open time'
+      if (rental.booking_type === 'open') {
+          const currentPrice = Math.ceil(duration * pricePerHour);
+          const priceEl = card.querySelector('.current-price');
+          if (priceEl) {
+            priceEl.textContent = formatCurrency(currentPrice);
+          }
       }
     }
 
@@ -297,6 +502,7 @@
         loadingBtn.textContent = 'Memproses...';
       }
 
+      // Gunakan SDK palsu (Firebase)
       const result = await window.dataSdk.create(rentalData);
       
       if (result.isOk) {
@@ -317,7 +523,23 @@
       const duration = calculateDuration(rental.start_time);
       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
       const pricePerHour = getPriceForRoom(room.type, config);
-      const totalPrice = Math.ceil(duration * pricePerHour);
+      
+      let totalPrice;
+      if (rental.booking_type === 'open') {
+          // Hitung harga final berdasarkan durasi
+          totalPrice = Math.ceil(duration * pricePerHour);
+      } else {
+          // Harga sudah di-set saat booking
+          totalPrice = rental.total_price;
+          // Mungkin ada biaya tambahan jika over time, tapi kita sederhanakan
+          // Jika main lebih lama dari waktu booking, hitung ulang
+          const bookedHours = parseInt(rental.booking_type);
+          if (duration > bookedHours) {
+              // Hitung ulang berdasarkan durasi aktual
+              totalPrice = Math.ceil(duration * pricePerHour);
+              showToast('Waktu booking terlampaui, harga disesuaikan.', 'success');
+          }
+      }
 
       const updatedRental = {
         ...rental,
@@ -333,13 +555,14 @@
         loadingBtn.textContent = 'Memproses...';
       }
 
+      // Gunakan SDK palsu (Firebase)
       const result = await window.dataSdk.update(updatedRental);
       
       if (result.isOk) {
         stopTimer(rental.__backendId);
         showToast(`${room.name} selesai - Total: ${formatCurrency(totalPrice)}`);
         
-        // Show receipt modal
+        // Tampilkan struk
         showReceiptModal(updatedRental, room, config);
       } else {
         showToast('Gagal menyelesaikan rental', 'error');
@@ -525,8 +748,8 @@
                 <label class="booking-option cursor-pointer">
                   <input type="radio" name="booking-type" value="open" checked class="sr-only">
                   <div class="p-3 rounded-lg border-2 text-center transition-all" 
-                    style="border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
-                           background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+                    style="border-color: ${window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color}; 
+                           background-color: ${window.elementSdk.config.primary_action_color + '20'};"> <!-- Warna terpilih -->
                     <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">
                       ⏰ Open Time
                     </div>
@@ -607,8 +830,7 @@
           // Add selected state to clicked option
           const selectedDiv = option.querySelector('div');
           selectedDiv.style.borderColor = window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color;
-          selectedDiv.style.backgroundColor = window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color;
-          selectedDiv.style.opacity = '0.2';
+          selectedDiv.style.backgroundColor = window.elementSdk.config.primary_action_color + '20'; // 20 hex = 12.5% opacity
           
           // Check the radio button
           option.querySelector('input[type="radio"]').checked = true;
@@ -667,6 +889,7 @@
     }
 
     function selectRole(role) {
+      // Gunakan SDK palsu
       window.elementSdk.setConfig({ user_role: role });
       const modal = document.getElementById('role-modal');
       if (modal) modal.remove();
@@ -675,21 +898,26 @@
     function renderApp(config) {
       const app = document.getElementById('app');
       
+      // Urutkan data: rental aktif dulu, lalu rental selesai terbaru
       const activeRentals = allRentals.filter(r => r.status === 'active');
-      const completedRentals = allRentals.filter(r => r.status === 'completed').slice(0, 10);
+      const completedRentals = allRentals
+          .filter(r => r.status === 'completed')
+          .sort((a, b) => new Date(b.end_time) - new Date(a.end_time)); // Urutkan terbaru dulu
 
       const availableRooms = REFERENCE_ROOMS.filter(room => 
         !activeRentals.some(rental => rental.room_id === room.id)
       );
 
       const isManager = config.user_role === 'manager';
-      const totalRevenue = completedRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+      const today = new Date().toDateString();
       const todayRentals = completedRentals.filter(rental => {
-        const rentalDate = new Date(rental.start_time).toDateString();
-        const today = new Date().toDateString();
+        const rentalDate = new Date(rental.end_time).toDateString();
         return rentalDate === today;
       });
+      
       const todayRevenue = todayRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+      const totalRevenue = completedRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+
 
       app.innerHTML = `
         <div class="min-h-full p-6" style="background-color: ${config.background_color || defaultConfig.background_color};">
@@ -726,42 +954,42 @@
               
               ${isManager ? `
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
-                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">📊</div>
-                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                  <div class="rounded-xl p-4 text-center card-shadow" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: #ffffff;">📊</div>
+                    <div class="font-bold mt-2" style="color: #ffffff; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
                       ${activeRentals.length}
                     </div>
-                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                    <div style="color: #ffffff; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
                       Rental Aktif
                     </div>
                   </div>
                   
-                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
-                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">💰</div>
-                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                  <div class="rounded-xl p-4 text-center card-shadow" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: #ffffff;">💰</div>
+                    <div class="font-bold mt-2" style="color: #ffffff; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
                       ${formatCurrency(todayRevenue)}
                     </div>
-                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                    <div style="color: #ffffff; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
                       Pendapatan Hari Ini
                     </div>
                   </div>
                   
-                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
-                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">📈</div>
-                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                  <div class="rounded-xl p-4 text-center card-shadow" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: #ffffff;">📈</div>
+                    <div class="font-bold mt-2" style="color: #ffffff; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
                       ${todayRentals.length}
                     </div>
-                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                    <div style="color: #ffffff; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
                       Transaksi Hari Ini
                     </div>
                   </div>
                   
-                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
-                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">🏆</div>
-                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                  <div class="rounded-xl p-4 text-center card-shadow" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: #ffffff;">🏆</div>
+                    <div class="font-bold mt-2" style="color: #ffffff; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
                       ${formatCurrency(totalRevenue)}
                     </div>
-                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                    <div style="color: #ffffff; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
                       Total Pendapatan
                     </div>
                   </div>
@@ -770,7 +998,7 @@
             </header>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+              <div class="rounded-xl p-6 card-shadow" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
                 <h2 class="font-bold mb-4 flex items-center gap-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
                   <span class="pulse-animation">🟢</span> Ruangan Tersedia
                 </h2>
@@ -795,11 +1023,11 @@
                             </div>
                           </div>
                           <button onclick="openStartModal('${room.id}', window.elementSdk.config)" 
-                            class="px-4 py-2 rounded-lg font-medium transition-all"
-                            style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; 
-                                   color: #ffffff;
-                                   font-size: ${config.font_size || defaultConfig.font_size}px;">
-                            Mulai
+                            class="px-4 py-2 rounded-lg font-medium transition-all gradient-bg hover:scale-105"
+                            style="color: #ffffff;
+                                   font-size: ${config.font_size || defaultConfig.font_size}px;
+                                   box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);">
+                            ✨ Mulai
                           </button>
                         </div>
                       `;
@@ -808,7 +1036,7 @@
                 </div>
               </div>
 
-              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+              <div class="rounded-xl p-6 card-shadow" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
                 <h2 class="font-bold mb-4 flex items-center gap-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
                   <span class="pulse-animation">🔴</span> Sedang Berjalan
                 </h2>
@@ -821,13 +1049,12 @@
                       const duration = calculateDuration(rental.start_time);
                       const hours = Math.floor(duration);
                       const minutes = Math.floor((duration - hours) * 60);
-                      const pricePerHour = getPriceForRoom(room.type, config);
                       
                       // Handle different booking types
                       let currentPrice, durationDisplay, bookingInfo;
                       
                       if (rental.booking_type === 'open') {
-                        currentPrice = Math.ceil(duration * pricePerHour);
+                        currentPrice = Math.ceil(duration * getPriceForRoom(room.type, config));
                         durationDisplay = `${hours} jam ${minutes} menit`;
                         bookingInfo = '⏰ Open Time';
                       } else {
@@ -840,7 +1067,10 @@
                           durationDisplay = `Sisa: ${remainingHours}j ${remainingMinutes}m`;
                           bookingInfo = `🕐 ${bookedHours} Jam (Booked)`;
                         } else {
-                          durationDisplay = 'Waktu Habis!';
+                          const overTime = duration - bookedHours;
+                          const overHours = Math.floor(overTime);
+                          const overMinutes = Math.floor((overTime - overHours) * 60);
+                          durationDisplay = `Lewat: ${overHours}j ${overMinutes}m`;
                           bookingInfo = `🕐 ${bookedHours} Jam (Expired)`;
                         }
                         currentPrice = rental.total_price;
@@ -894,11 +1124,11 @@
                           </div>
 
                           <button onclick="endRental(allRentals.find(r => r.__backendId === '${rental.__backendId}'), window.elementSdk.config)" 
-                            class="end-btn w-full py-2 rounded-lg font-medium transition-all"
-                            style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
-                                   color: #ffffff;
-                                   font-size: ${config.font_size || defaultConfig.font_size}px;">
-                            Selesai
+                            class="end-btn w-full py-2 rounded-lg font-medium transition-all gradient-secondary hover:scale-105"
+                            style="color: #ffffff;
+                                   font-size: ${config.font_size || defaultConfig.font_size}px;
+                                   box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);">
+                            🎯 Selesai
                           </button>
                         </div>
                       `;
@@ -909,23 +1139,23 @@
             </div>
 
             ${completedRentals.length > 0 ? `
-              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+              <div class="rounded-xl p-6 card-shadow" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
                 <div class="flex items-center justify-between mb-4">
                   <h2 class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
                     📋 ${isManager ? 'Laporan Transaksi' : 'Riwayat Terakhir'}
                   </h2>
                   ${isManager ? `
                     <div class="flex gap-2">
-                      <button onclick="exportReport('today')" class="px-4 py-2 rounded-lg text-sm transition-all" 
-                        style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; 
-                               color: #ffffff; 
-                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      <button onclick="exportReport('today')" class="px-4 py-2 rounded-lg text-sm transition-all gradient-bg hover:scale-105" 
+                        style="color: #ffffff; 
+                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;
+                               box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);">
                         📊 Laporan Hari Ini
                       </button>
-                      <button onclick="exportReport('all')" class="px-4 py-2 rounded-lg text-sm transition-all" 
-                        style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
-                               color: #ffffff; 
-                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      <button onclick="exportReport('all')" class="px-4 py-2 rounded-lg text-sm transition-all gradient-secondary hover:scale-105" 
+                        style="color: #ffffff; 
+                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;
+                               box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3);">
                         📈 Laporan Lengkap
                       </button>
                     </div>
@@ -958,7 +1188,7 @@
                             </td>
                             ${isManager ? `<td class="p-3" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">${rental.phone}</td>` : ''}
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
-                              ${formatDate(rental.start_time)}
+                              ${formatDate(rental.end_time)}
                             </td>
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
                               ${rental.duration_hours.toFixed(1)} jam
@@ -1036,87 +1266,33 @@
       renderApp(config);
     }
 
-    window.elementSdk.init({
-      defaultConfig,
-      onConfigChange,
-      mapToCapabilities: (config) => ({
-        recolorables: [
-          {
-            get: () => config.background_color || defaultConfig.background_color,
-            set: (value) => {
-              config.background_color = value;
-              window.elementSdk.setConfig({ background_color: value });
-            }
-          },
-          {
-            get: () => config.surface_color || defaultConfig.surface_color,
-            set: (value) => {
-              config.surface_color = value;
-              window.elementSdk.setConfig({ surface_color: value });
-            }
-          },
-          {
-            get: () => config.text_color || defaultConfig.text_color,
-            set: (value) => {
-              config.text_color = value;
-              window.elementSdk.setConfig({ text_color: value });
-            }
-          },
-          {
-            get: () => config.primary_action_color || defaultConfig.primary_action_color,
-            set: (value) => {
-              config.primary_action_color = value;
-              window.elementSdk.setConfig({ primary_action_color: value });
-            }
-          },
-          {
-            get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
-            set: (value) => {
-              config.secondary_action_color = value;
-              window.elementSdk.setConfig({ secondary_action_color: value });
-            }
-          }
-        ],
-        borderables: [],
-        fontEditable: {
-          get: () => config.font_family || defaultConfig.font_family,
-          set: (value) => {
-            config.font_family = value;
-            window.elementSdk.setConfig({ font_family: value });
-          }
-        },
-        fontSizeable: {
-          get: () => config.font_size || defaultConfig.font_size,
-          set: (value) => {
-            config.font_size = value;
-            window.elementSdk.setConfig({ font_size: value });
-          }
-        }
-      }),
-      mapToEditPanelValues: (config) => new Map([
-        ['app_title', config.app_title || defaultConfig.app_title],
-        ['billiard_price', config.billiard_price || defaultConfig.billiard_price],
-        ['karaoke_price', config.karaoke_price || defaultConfig.karaoke_price],
-        ['massage_price', config.massage_price || defaultConfig.massage_price],
-        ['user_role', config.user_role || defaultConfig.user_role]
-      ])
-    });
-
+    // --- Inisialisasi Aplikasi ---
+    // 1. Render aplikasi dengan config default/tersimpan
+    renderApp(window.elementSdk.config);
+    
+    // 2. Mulai mendengarkan data dari Firebase
     window.dataSdk.init(dataHandler).then(result => {
       if (!result.isOk) {
-        showToast('Gagal menginisialisasi aplikasi', 'error');
+        showToast('Gagal menginisialisasi database', 'error');
+      } else {
+        showToast('Terhubung ke database real-time', 'success');
       }
     });
 
     function exportReport(type) {
       const config = window.elementSdk.config;
-      const dataToExport = type === 'today' ? 
-        allRentals.filter(rental => {
-          const rentalDate = new Date(rental.start_time).toDateString();
-          const today = new Date().toDateString();
-          return rentalDate === today && rental.status === 'completed';
-        }) : 
-        allRentals.filter(r => r.status === 'completed');
+      
+      const completedRentals = allRentals
+          .filter(r => r.status === 'completed')
+          .sort((a, b) => new Date(b.end_time) - new Date(a.end_time));
+          
+      const today = new Date().toDateString();
+      const todayRentals = completedRentals.filter(rental => {
+        const rentalDate = new Date(rental.end_time).toDateString();
+        return rentalDate === today;
+      });
+
+      const dataToExport = type === 'today' ? todayRentals : completedRentals;
 
       if (dataToExport.length === 0) {
         showToast('Tidak ada data untuk diekspor', 'error');
@@ -1136,7 +1312,7 @@
         const endDate = new Date(rental.end_time);
         
         csvContent += `"${room.name}","${rental.customer_name}","${rental.phone}",`;
-        csvContent += `"${startDate.toLocaleDateString('id-ID')}","${startDate.toLocaleTimeString('id-ID')}",`;
+        csvContent += `"${endDate.toLocaleDateString('id-ID')}","${startDate.toLocaleTimeString('id-ID')}",`;
         csvContent += `"${endDate.toLocaleTimeString('id-ID')}","${rental.duration_hours.toFixed(2)}",`;
         csvContent += `"${rental.booking_type === 'open' ? 'Open Time' : rental.booking_type + ' Jam'}",`;
         csvContent += `"${rental.total_price}"\n`;
@@ -1163,6 +1339,7 @@
       showToast(`${reportTitle} berhasil diunduh!`);
     }
 
+    // Pasang fungsi ke window agar bisa di-klik
     window.openStartModal = openStartModal;
     window.closeModal = closeModal;
     window.endRental = endRental;
@@ -1174,5 +1351,7 @@
     window.allRentals = allRentals;
     window.REFERENCE_ROOMS = REFERENCE_ROOMS;
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9995728f2064fd39',t:'MTc2MjI3MzMxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
+
+
