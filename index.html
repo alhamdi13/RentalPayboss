@@ -76,13 +76,6 @@
     window.where = where;
     window.getDocs = getDocs;
 
-    // Login sebagai anonim untuk mengamankan sesi
-    signInAnonymously(auth).catch((error) => {
-      console.error("Anonymous sign-in failed:", error);
-      // Sekarang showToast sudah terdefinisi
-      showToast('Gagal terhubung ke server', 'error');
-    });
-
     // Pasang listener untuk data rental
     function setupRealtimeListener(dataHandler) {
       const q = query(rentalsCollection);
@@ -95,11 +88,37 @@
         dataHandler.onDataChanged(rentals);
       }, (error) => {
         console.error("Error listening to rentals: ", error);
-        showToast('Gagal memuat data real-time', 'error');
+        showToast('Gagal memuat data real-time: ' + error.message, 'error');
       });
     }
     
     window.setupRealtimeListener = setupRealtimeListener;
+
+    // *** PERUBAHAN UTAMA DI SINI ***
+    // Bungkus inisialisasi aplikasi di dalam listener auth
+    // Ini memastikan kita login SEBELUM mencoba membaca database
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Pengguna berhasil login (termasuk anonim)
+        console.log("Otentikasi berhasil, UID:", user.uid);
+        
+        // Panggil fungsi inisialisasi UI dari skrip kedua
+        if (window.initializeAppUI) {
+          window.initializeAppUI();
+        } else {
+          // Fallback jika skrip kedua belum dimuat
+          setTimeout(() => window.initializeAppUI && window.initializeAppUI(), 100);
+        }
+      } else {
+        // Pengguna tidak login, coba login
+        console.log("Tidak ada pengguna, mencoba login anonim...");
+        signInAnonymously(auth).catch((error) => {
+          console.error("Anonymous sign-in failed:", error);
+          // Sekarang showToast sudah terdefinisi
+          showToast('Gagal terhubung ke server', 'error');
+        });
+      }
+    });
 
   </script>
 
@@ -1267,17 +1286,27 @@
     }
 
     // --- Inisialisasi Aplikasi ---
-    // 1. Render aplikasi dengan config default/tersimpan
-    renderApp(window.elementSdk.config);
-    
-    // 2. Mulai mendengarkan data dari Firebase
-    window.dataSdk.init(dataHandler).then(result => {
-      if (!result.isOk) {
-        showToast('Gagal menginisialisasi database', 'error');
-      } else {
-        showToast('Terhubung ke database real-time', 'success');
-      }
-    });
+    // FUNGSI BARU UNTUK DIPANGGIL OLEH onAuthStateChanged
+    window.initializeAppUI = function() {
+      // 1. Render aplikasi dengan config default/tersimpan
+      renderApp(window.elementSdk.config);
+      
+      // 2. Mulai mendengarkan data dari Firebase
+      // Ini sekarang aman karena kita sudah diautentikasi
+      window.dataSdk.init(dataHandler).then(result => {
+        if (!result.isOk) {
+          showToast('Gagal menginisialisasi database', 'error');
+        } else {
+          // Pesan sukses bisa dihapus agar tidak mengganggu
+          // showToast('Terhubung ke database real-time', 'success');
+          console.log("Berhasil terhubung ke database real-time.");
+        }
+      });
+    }
+
+    // HAPUS BLOK INIT LAMA:
+    // renderApp(window.elementSdk.config);
+    // window.dataSdk.init(dataHandler).then(...);
 
     function exportReport(type) {
       const config = window.elementSdk.config;
@@ -1353,5 +1382,6 @@
   </script>
 </body>
 </html>
+
 
 
