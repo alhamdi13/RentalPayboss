@@ -8,7 +8,7 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Firebase SDK - Ganti SDK yang hilang -->
+  <!-- SATU BLOK SCRIPT TUNGGAL UNTUK MENGHINDARI RACE CONDITION -->
   <script type="module">
     // Impor fungsi-fungsi yang kita butuhkan dari Firebase SDK
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -41,10 +41,8 @@
     }
 
     // -----------------------------------------------------------------
-    // PENTING: Masukkan Konfigurasi Firebase Anda di Sini!
+    // KONFIGURASI FIREBASE
     // -----------------------------------------------------------------
-    // Your web app's Firebase configuration
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
       apiKey: "AIzaSyCjRY87p_EzrxkVB7HG13bozEUnf6C-63Y",
       authDomain: "rental-manager-a4d21.firebaseapp.com",
@@ -64,7 +62,7 @@
     // Buat referensi koleksi
     const rentalsCollection = collection(db, "rentals");
 
-    // Tempelkan semua kode aplikasi Anda di sini
+    // Pasang variabel global
     window.db = db;
     window.auth = auth;
     window.rentalsCollection = rentalsCollection;
@@ -94,193 +92,11 @@
     
     window.setupRealtimeListener = setupRealtimeListener;
 
-    // *** PERUBAHAN UTAMA DI SINI ***
-    // Bungkus inisialisasi aplikasi di dalam listener auth
-    // Ini memastikan kita login SEBELUM mencoba membaca database
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // Pengguna berhasil login (termasuk anonim)
-        console.log("Otentikasi berhasil, UID:", user.uid);
-        
-        // Panggil fungsi inisialisasi UI dari skrip kedua
-        if (window.initializeAppUI) {
-          window.initializeAppUI();
-        } else {
-          // Fallback jika skrip kedua belum dimuat
-          setTimeout(() => window.initializeAppUI && window.initializeAppUI(), 100);
-        }
-      } else {
-        // Pengguna tidak login, coba login
-        console.log("Tidak ada pengguna, mencoba login anonim...");
-        signInAnonymously(auth).catch((error) => {
-          console.error("Anonymous sign-in failed:", error);
-          // Sekarang showToast sudah terdefinisi
-          showToast('Gagal terhubung ke server', 'error');
-        });
-      }
-    });
+    // -------------------------------------------------
+    // SEMUA KODE APLIKASI SEKARANG ADA DI SINI
+    // -------------------------------------------------
 
-  </script>
-
-  <style>
-    body {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    
-    html {
-      height: 100%;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .slide-in {
-      animation: slideIn 0.3s ease-out;
-    }
-
-    @keyframes pulse {
-      0%, 100% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0.7;
-      }
-    }
-
-    .pulse-animation {
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .room-card {
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.1);
-      border: 1px solid rgba(6, 182, 212, 0.2);
-    }
-
-    .room-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 25px rgba(6, 182, 212, 0.2);
-      border-color: rgba(6, 182, 212, 0.4);
-    }
-
-    .gradient-bg {
-      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-    }
-
-    .gradient-secondary {
-      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    }
-
-    .card-shadow {
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .toast {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 16px 24px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 1000;
-      animation: slideIn 0.3s ease-out;
-    }
-
-    .receipt {
-      width: 300px;
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      line-height: 1.4;
-      color: #000;
-      background: #fff;
-      padding: 20px;
-      margin: 0 auto;
-    }
-
-    .receipt-header {
-      text-align: center;
-      border-bottom: 2px dashed #000;
-      padding-bottom: 15px;
-      margin-bottom: 15px;
-    }
-
-    .receipt-title {
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-
-    .receipt-address {
-      font-size: 10px;
-      margin-bottom: 3px;
-    }
-
-    .receipt-body {
-      margin-bottom: 15px;
-    }
-
-    .receipt-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 3px;
-    }
-
-    .receipt-separator {
-      border-top: 1px dashed #000;
-      margin: 10px 0;
-    }
-
-    .receipt-total {
-      font-weight: bold;
-      font-size: 14px;
-      border-top: 2px solid #000;
-      padding-top: 5px;
-    }
-
-    .receipt-footer {
-      text-align: center;
-      border-top: 2px dashed #000;
-      padding-top: 15px;
-      margin-top: 15px;
-      font-size: 10px;
-    }
-
-    @media print {
-      body * {
-        visibility: hidden;
-      }
-      .receipt, .receipt * {
-        visibility: visible;
-      }
-      .receipt {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        padding: 0;
-      }
-    }
-  </style>
-  <style>@view-transition { navigation: auto; }</style>
-</head>
-<body>
-  <div id="app" class="min-h-full"></div>
-  
-  <script type="module">
-    // KONSTANTA APLIKASI DIPINDAHKAN KE ATAS
+    // KONSTANTA APLIKASI
     const REFERENCE_ROOMS = [
       { id: 'billiard-1', name: 'Billiard 1', type: 'billiard', icon: '🎱' },
       { id: 'karaoke-1', name: 'Karaoke 1', type: 'karaoke', icon: '🎤' },
@@ -289,7 +105,7 @@
       { id: 'massage-1', name: 'Kursi Pijat', type: 'massage', icon: '💆' }
     ];
 
-    // defaultConfig DIPINDAHKAN KE ATAS (SEBELUM appConfig)
+    // defaultConfig
     const defaultConfig = {
       background_color: '#f0f9ff',
       surface_color: '#ffffff',
@@ -430,9 +246,6 @@
       const date = new Date(dateString);
       return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     }
-
-    // FUNGSI showToast TELAH DIPINDAHKAN KE <script> PERTAMA
-    // window.showToast = function(message, type = 'success') { ... }
 
     function calculateDuration(startTime) {
       const now = new Date();
@@ -1304,10 +1117,6 @@
       });
     }
 
-    // HAPUS BLOK INIT LAMA:
-    // renderApp(window.elementSdk.config);
-    // window.dataSdk.init(dataHandler).then(...);
-
     function exportReport(type) {
       const config = window.elementSdk.config;
       
@@ -1379,9 +1188,41 @@
     window.exportReport = exportReport;
     window.allRentals = allRentals;
     window.REFERENCE_ROOMS = REFERENCE_ROOMS;
+
+    // -----------------------------------------------------------------
+    // LOGIKA INISIALISASI (DIPIND_AHKAN KE BAWAH)
+    // -----------------------------------------------------------------
+    // Bungkus inisialisasi aplikasi di dalam listener auth
+    // Ini memastikan kita login SEBELUM mencoba membaca database
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Pengguna berhasil login (termasuk anonim)
+        console.log("Otentikasi berhasil, UID:", user.uid);
+        
+        // Sekarang aman untuk memanggil initializeAppUI
+        // karena sudah pasti terdefinisi
+        window.initializeAppUI();
+      } else {
+        // Pengguna tidak login, coba login
+        console.log("Tidak ada pengguna, mencoba login anonim...");
+        signInAnonymously(auth).catch((error) => {
+          console.error("Anonymous sign-in failed:", error);
+          showToast('Gagal terhubung ke server', 'error');
+        });
+      }
+    });
+
   </script>
+</head>
+<body>
+  <div id="app" class="min-h-full"></div>
+  
+  <!-- SCRIPT KEDUA DIHAPUS, KODENYA SUDAH DIGABUNG KE ATAS -->
+  <!-- 
+  <script type="module">
+    // ... semua kode dari skrip kedua ada di sini ...
+  </script>
+  -->
 </body>
 </html>
-
-
 
