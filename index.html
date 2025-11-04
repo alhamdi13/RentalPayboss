@@ -166,7 +166,8 @@
       karaoke_price: '75000',
       massage_price: '30000',
       font_family: 'Inter',
-      font_size: 16
+      font_size: 16,
+      user_role: 'kasir'
     };
 
     let allRentals = [];
@@ -628,6 +629,49 @@
       if (modal) modal.remove();
     }
 
+    function showRoleSelector() {
+      const modal = document.createElement('div');
+      modal.id = 'role-modal';
+      modal.className = 'fixed inset-0 flex items-center justify-center z-50 p-4';
+      modal.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+      
+      modal.innerHTML = `
+        <div class="rounded-lg p-8 max-w-md w-full slide-in text-center" style="background-color: ${window.elementSdk.config.surface_color || defaultConfig.surface_color};">
+          <h2 class="font-bold mb-6" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 1.8}px;">
+            🔐 Pilih Role Anda
+          </h2>
+          
+          <div class="space-y-4">
+            <button onclick="selectRole('kasir')" class="w-full p-4 rounded-lg border-2 transition-all hover:scale-105" 
+              style="background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color}; 
+                     border-color: ${window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color}; 
+                     color: ${window.elementSdk.config.text_color || defaultConfig.text_color};">
+              <div style="font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 2}px;">👨‍💼</div>
+              <div class="font-semibold mt-2" style="font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 1.2}px;">KASIR</div>
+              <div style="opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">Kelola rental harian</div>
+            </button>
+            
+            <button onclick="selectRole('manager')" class="w-full p-4 rounded-lg border-2 transition-all hover:scale-105" 
+              style="background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color}; 
+                     border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                     color: ${window.elementSdk.config.text_color || defaultConfig.text_color};">
+              <div style="font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 2}px;">👑</div>
+              <div class="font-semibold mt-2" style="font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 1.2}px;">MANAGER</div>
+              <div style="opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">Akses lengkap + laporan</div>
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+    }
+
+    function selectRole(role) {
+      window.elementSdk.setConfig({ user_role: role });
+      const modal = document.getElementById('role-modal');
+      if (modal) modal.remove();
+    }
+
     function renderApp(config) {
       const app = document.getElementById('app');
       
@@ -638,16 +682,91 @@
         !activeRentals.some(rental => rental.room_id === room.id)
       );
 
+      const isManager = config.user_role === 'manager';
+      const totalRevenue = completedRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+      const todayRentals = completedRentals.filter(rental => {
+        const rentalDate = new Date(rental.start_time).toDateString();
+        const today = new Date().toDateString();
+        return rentalDate === today;
+      });
+      const todayRevenue = todayRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+
       app.innerHTML = `
         <div class="min-h-full p-6" style="background-color: ${config.background_color || defaultConfig.background_color};">
           <div class="max-w-7xl mx-auto">
-            <header class="mb-8 text-center">
-              <h1 class="font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">
-                ${config.app_title || defaultConfig.app_title}
-              </h1>
-              <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
-                Sistem Manajemen Rental Otomatis
-              </p>
+            <header class="mb-8">
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-center flex-1">
+                  <h1 class="font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">
+                    ${config.app_title || defaultConfig.app_title}
+                  </h1>
+                  <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                    Sistem Manajemen Rental Otomatis
+                  </p>
+                </div>
+                <div class="flex items-center gap-4">
+                  <div class="text-right">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                        ${isManager ? '👑' : '👨‍💼'}
+                      </span>
+                      <span class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.1}px;">
+                        ${isManager ? 'MANAGER' : 'KASIR'}
+                      </span>
+                    </div>
+                    <button onclick="showRoleSelector()" class="text-sm px-3 py-1 rounded transition-all" 
+                      style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                             color: #ffffff; 
+                             font-size: ${(config.font_size || defaultConfig.font_size) * 0.8}px;">
+                      Ganti Role
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              ${isManager ? `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">📊</div>
+                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                      ${activeRentals.length}
+                    </div>
+                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      Rental Aktif
+                    </div>
+                  </div>
+                  
+                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">💰</div>
+                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                      ${formatCurrency(todayRevenue)}
+                    </div>
+                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      Pendapatan Hari Ini
+                    </div>
+                  </div>
+                  
+                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">📈</div>
+                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                      ${todayRentals.length}
+                    </div>
+                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      Transaksi Hari Ini
+                    </div>
+                  </div>
+                  
+                  <div class="rounded-lg p-4 text-center" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                    <div style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">🏆</div>
+                    <div class="font-bold mt-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                      ${formatCurrency(totalRevenue)}
+                    </div>
+                    <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                      Total Pendapatan
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
             </header>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -791,9 +910,27 @@
 
             ${completedRentals.length > 0 ? `
               <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
-                <h2 class="font-bold mb-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
-                  📋 Riwayat Terakhir
-                </h2>
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
+                    📋 ${isManager ? 'Laporan Transaksi' : 'Riwayat Terakhir'}
+                  </h2>
+                  ${isManager ? `
+                    <div class="flex gap-2">
+                      <button onclick="exportReport('today')" class="px-4 py-2 rounded-lg text-sm transition-all" 
+                        style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; 
+                               color: #ffffff; 
+                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                        📊 Laporan Hari Ini
+                      </button>
+                      <button onclick="exportReport('all')" class="px-4 py-2 rounded-lg text-sm transition-all" 
+                        style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                               color: #ffffff; 
+                               font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                        📈 Laporan Lengkap
+                      </button>
+                    </div>
+                  ` : ''}
+                </div>
                 
                 <div class="overflow-x-auto">
                   <table class="w-full" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
@@ -801,13 +938,15 @@
                       <tr style="border-bottom: 2px solid ${config.background_color || defaultConfig.background_color};">
                         <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Ruangan</th>
                         <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Pelanggan</th>
+                        ${isManager ? `<th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Telepon</th>` : ''}
                         <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Tanggal</th>
                         <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Durasi</th>
                         <th class="text-right p-3" style="color: ${config.text_color || defaultConfig.text_color};">Total</th>
+                        ${isManager ? `<th class="text-center p-3" style="color: ${config.text_color || defaultConfig.text_color};">Aksi</th>` : ''}
                       </tr>
                     </thead>
                     <tbody>
-                      ${completedRentals.map(rental => {
+                      ${(isManager ? completedRentals : completedRentals.slice(0, 5)).map(rental => {
                         const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
                         return `
                           <tr style="border-bottom: 1px solid ${config.background_color || defaultConfig.background_color};">
@@ -817,6 +956,7 @@
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
                               ${rental.customer_name}
                             </td>
+                            ${isManager ? `<td class="p-3" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">${rental.phone}</td>` : ''}
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
                               ${formatDate(rental.start_time)}
                             </td>
@@ -826,12 +966,54 @@
                             <td class="p-3 text-right font-semibold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color};">
                               ${formatCurrency(rental.total_price)}
                             </td>
+                            ${isManager ? `
+                              <td class="p-3 text-center">
+                                <button onclick="showReceiptModal(allRentals.find(r => r.__backendId === '${rental.__backendId}'), REFERENCE_ROOMS.find(r => r.id === '${rental.room_id}'), window.elementSdk.config)" 
+                                  class="px-2 py-1 rounded text-sm transition-all" 
+                                  style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                                         color: #ffffff; 
+                                         font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">
+                                  🧾 Struk
+                                </button>
+                              </td>
+                            ` : ''}
                           </tr>
                         `;
                       }).join('')}
                     </tbody>
                   </table>
                 </div>
+                
+                ${isManager && completedRentals.length > 0 ? `
+                  <div class="mt-4 p-4 rounded" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div class="font-bold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                          ${completedRentals.length}
+                        </div>
+                        <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                          Total Transaksi
+                        </div>
+                      </div>
+                      <div>
+                        <div class="font-bold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                          ${(completedRentals.reduce((sum, r) => sum + r.duration_hours, 0)).toFixed(1)} jam
+                        </div>
+                        <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                          Total Durasi
+                        </div>
+                      </div>
+                      <div>
+                        <div class="font-bold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
+                          ${formatCurrency(totalRevenue)}
+                        </div>
+                        <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                          Total Pendapatan
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ` : ''}
               </div>
             ` : ''}
           </div>
@@ -915,7 +1097,8 @@
         ['app_title', config.app_title || defaultConfig.app_title],
         ['billiard_price', config.billiard_price || defaultConfig.billiard_price],
         ['karaoke_price', config.karaoke_price || defaultConfig.karaoke_price],
-        ['massage_price', config.massage_price || defaultConfig.massage_price]
+        ['massage_price', config.massage_price || defaultConfig.massage_price],
+        ['user_role', config.user_role || defaultConfig.user_role]
       ])
     });
 
@@ -925,12 +1108,71 @@
       }
     });
 
+    function exportReport(type) {
+      const config = window.elementSdk.config;
+      const dataToExport = type === 'today' ? 
+        allRentals.filter(rental => {
+          const rentalDate = new Date(rental.start_time).toDateString();
+          const today = new Date().toDateString();
+          return rentalDate === today && rental.status === 'completed';
+        }) : 
+        allRentals.filter(r => r.status === 'completed');
+
+      if (dataToExport.length === 0) {
+        showToast('Tidak ada data untuk diekspor', 'error');
+        return;
+      }
+
+      const reportTitle = type === 'today' ? 'Laporan Harian' : 'Laporan Lengkap';
+      const reportDate = new Date().toLocaleDateString('id-ID');
+      
+      let csvContent = `${config.app_title || defaultConfig.app_title}\n`;
+      csvContent += `${reportTitle} - ${reportDate}\n\n`;
+      csvContent += `Ruangan,Pelanggan,Telepon,Tanggal,Waktu Mulai,Waktu Selesai,Durasi (jam),Tipe Booking,Total\n`;
+      
+      dataToExport.forEach(rental => {
+        const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+        const startDate = new Date(rental.start_time);
+        const endDate = new Date(rental.end_time);
+        
+        csvContent += `"${room.name}","${rental.customer_name}","${rental.phone}",`;
+        csvContent += `"${startDate.toLocaleDateString('id-ID')}","${startDate.toLocaleTimeString('id-ID')}",`;
+        csvContent += `"${endDate.toLocaleTimeString('id-ID')}","${rental.duration_hours.toFixed(2)}",`;
+        csvContent += `"${rental.booking_type === 'open' ? 'Open Time' : rental.booking_type + ' Jam'}",`;
+        csvContent += `"${rental.total_price}"\n`;
+      });
+      
+      const totalRevenue = dataToExport.reduce((sum, rental) => sum + rental.total_price, 0);
+      const totalDuration = dataToExport.reduce((sum, rental) => sum + rental.duration_hours, 0);
+      
+      csvContent += `\nRingkasan:\n`;
+      csvContent += `Total Transaksi,${dataToExport.length}\n`;
+      csvContent += `Total Durasi,"${totalDuration.toFixed(2)} jam"\n`;
+      csvContent += `Total Pendapatan,"${totalRevenue}"\n`;
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${reportTitle.replace(' ', '_')}_${reportDate.replace(/\//g, '-')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showToast(`${reportTitle} berhasil diunduh!`);
+    }
+
     window.openStartModal = openStartModal;
     window.closeModal = closeModal;
     window.endRental = endRental;
     window.printReceipt = printReceipt;
     window.closeReceiptModal = closeReceiptModal;
+    window.showRoleSelector = showRoleSelector;
+    window.selectRole = selectRole;
+    window.exportReport = exportReport;
     window.allRentals = allRentals;
+    window.REFERENCE_ROOMS = REFERENCE_ROOMS;
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99956d538324fd39',t:'MTc2MjI3MzEwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9995728f2064fd39',t:'MTc2MjI3MzMxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
