@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="id">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rental Manager</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    html {
+      height: 100%;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .slide-in {
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.7;
+      }
+    }
+
+    .pulse-animation {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .room-card {
+      transition: all 0.3s ease;
+    }
+
+    .room-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .receipt {
+      width: 300px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #000;
+      background: #fff;
+      padding: 20px;
+      margin: 0 auto;
+    }
+
+    .receipt-header {
+      text-align: center;
+      border-bottom: 2px dashed #000;
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+    }
+
+    .receipt-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .receipt-address {
+      font-size: 10px;
+      margin-bottom: 3px;
+    }
+
+    .receipt-body {
+      margin-bottom: 15px;
+    }
+
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+
+    .receipt-separator {
+      border-top: 1px dashed #000;
+      margin: 10px 0;
+    }
+
+    .receipt-total {
+      font-weight: bold;
+      font-size: 14px;
+      border-top: 2px solid #000;
+      padding-top: 5px;
+    }
+
+    .receipt-footer {
+      text-align: center;
+      border-top: 2px dashed #000;
+      padding-top: 15px;
+      margin-top: 15px;
+      font-size: 10px;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .receipt, .receipt * {
+        visibility: visible;
+      }
+      .receipt {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0;
+      }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body>
+  <div id="app" class="min-h-full"></div>
+  <script>
+    const REFERENCE_ROOMS = [
+      { id: 'billiard-1', name: 'Billiard 1', type: 'billiard', icon: '🎱' },
+      { id: 'karaoke-1', name: 'Karaoke 1', type: 'karaoke', icon: '🎤' },
+      { id: 'karaoke-2', name: 'Karaoke 2', type: 'karaoke', icon: '🎤' },
+      { id: 'karaoke-3', name: 'Karaoke 3', type: 'karaoke', icon: '🎤' },
+      { id: 'massage-1', name: 'Kursi Pijat', type: 'massage', icon: '💆' }
+    ];
+
+    const defaultConfig = {
+      background_color: '#0f172a',
+      surface_color: '#1e293b',
+      text_color: '#f1f5f9',
+      primary_action_color: '#3b82f6',
+      secondary_action_color: '#64748b',
+      app_title: 'One Stop Entertainment Pay Boss',
+      billiard_price: '50000',
+      karaoke_price: '75000',
+      massage_price: '30000',
+      font_family: 'Inter',
+      font_size: 16
+    };
+
+    let allRentals = [];
+    let activeTimers = new Map();
+
+    function getPriceForRoom(roomType, config) {
+      const prices = {
+        'billiard': parseInt(config.billiard_price || defaultConfig.billiard_price),
+        'karaoke': parseInt(config.karaoke_price || defaultConfig.karaoke_price),
+        'massage': parseInt(config.massage_price || defaultConfig.massage_price)
+      };
+      return prices[roomType] || 0;
+    }
+
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0
+      }).format(amount);
+    }
+
+    function formatTime(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+      toast.style.color = '#ffffff';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function calculateDuration(startTime) {
+      const now = new Date();
+      const start = new Date(startTime);
+      const diffMs = now - start;
+      const diffHours = diffMs / (1000 * 60 * 60);
+      return Math.max(0, diffHours);
+    }
+
+    function startTimer(rental, config) {
+      if (activeTimers.has(rental.__backendId)) {
+        clearInterval(activeTimers.get(rental.__backendId));
+      }
+
+      const timer = setInterval(() => {
+        updateRentalDisplay(rental, config);
+      }, 60000);
+
+      activeTimers.set(rental.__backendId, timer);
+    }
+
+    function stopTimer(rentalId) {
+      if (activeTimers.has(rentalId)) {
+        clearInterval(activeTimers.get(rentalId));
+        activeTimers.delete(rentalId);
+      }
+    }
+
+    function updateRentalDisplay(rental, config) {
+      const card = document.querySelector(`[data-rental-id="${rental.__backendId}"]`);
+      if (!card) return;
+
+      const duration = calculateDuration(rental.start_time);
+      const hours = Math.floor(duration);
+      const minutes = Math.floor((duration - hours) * 60);
+      
+      const durationEl = card.querySelector('.duration-display');
+      if (durationEl) {
+        durationEl.textContent = `${hours} jam ${minutes} menit`;
+      }
+
+      const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+      const pricePerHour = getPriceForRoom(room.type, config);
+      const currentPrice = Math.ceil(duration * pricePerHour);
+      
+      const priceEl = card.querySelector('.current-price');
+      if (priceEl) {
+        priceEl.textContent = formatCurrency(currentPrice);
+      }
+    }
+
+    async function startRental(roomId, customerName, phone, bookingType, config) {
+      if (allRentals.filter(r => r.status === 'active').length >= 999) {
+        showToast('Maksimum 999 rental aktif tercapai', 'error');
+        return;
+      }
+
+      const startTime = new Date().toISOString();
+      const room = REFERENCE_ROOMS.find(r => r.id === roomId);
+      const pricePerHour = getPriceForRoom(room.type, config);
+      
+      let totalPrice = 0;
+      if (bookingType !== 'open') {
+        const bookedHours = parseInt(bookingType);
+        totalPrice = bookedHours * pricePerHour;
+      }
+      
+      const rentalData = {
+        room_id: roomId,
+        customer_name: customerName,
+        phone: phone,
+        start_time: startTime,
+        end_time: null,
+        duration_hours: 0,
+        total_price: totalPrice,
+        status: 'active',
+        booking_type: bookingType
+      };
+
+      const loadingBtn = document.querySelector(`[data-room-id="${roomId}"] .start-btn`);
+      if (loadingBtn) {
+        loadingBtn.disabled = true;
+        loadingBtn.textContent = 'Memproses...';
+      }
+
+      const result = await window.dataSdk.create(rentalData);
+      
+      if (result.isOk) {
+        const bookingInfo = bookingType === 'open' ? 'Open Time' : `${bookingType} Jam`;
+        showToast(`${room.name} berhasil dimulai! (${bookingInfo})`);
+        closeModal();
+      } else {
+        showToast('Gagal memulai rental', 'error');
+        if (loadingBtn) {
+          loadingBtn.disabled = false;
+          loadingBtn.textContent = 'Mulai Rental';
+        }
+      }
+    }
+
+    async function endRental(rental, config) {
+      const endTime = new Date().toISOString();
+      const duration = calculateDuration(rental.start_time);
+      const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+      const pricePerHour = getPriceForRoom(room.type, config);
+      const totalPrice = Math.ceil(duration * pricePerHour);
+
+      const updatedRental = {
+        ...rental,
+        end_time: endTime,
+        duration_hours: parseFloat(duration.toFixed(2)),
+        total_price: totalPrice,
+        status: 'completed'
+      };
+
+      const loadingBtn = document.querySelector(`[data-rental-id="${rental.__backendId}"] .end-btn`);
+      if (loadingBtn) {
+        loadingBtn.disabled = true;
+        loadingBtn.textContent = 'Memproses...';
+      }
+
+      const result = await window.dataSdk.update(updatedRental);
+      
+      if (result.isOk) {
+        stopTimer(rental.__backendId);
+        showToast(`${room.name} selesai - Total: ${formatCurrency(totalPrice)}`);
+        
+        // Show receipt modal
+        showReceiptModal(updatedRental, room, config);
+      } else {
+        showToast('Gagal menyelesaikan rental', 'error');
+        if (loadingBtn) {
+          loadingBtn.disabled = false;
+          loadingBtn.textContent = 'Selesai';
+        }
+      }
+    }
+
+    function showReceiptModal(rental, room, config) {
+      const modal = document.createElement('div');
+      modal.id = 'receipt-modal';
+      modal.className = 'fixed inset-0 flex items-center justify-center z-50 p-4';
+      modal.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      
+      const receiptDate = new Date(rental.end_time);
+      const receiptNumber = `RC${Date.now().toString().slice(-6)}`;
+      
+      modal.innerHTML = `
+        <div class="rounded-lg p-6 max-w-md w-full slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold" style="color: ${config.text_color || defaultConfig.text_color};">
+              💳 Struk Pembayaran
+            </h2>
+            <button onclick="closeReceiptModal()" class="text-2xl" style="color: ${config.text_color || defaultConfig.text_color};">&times;</button>
+          </div>
+          
+          <div id="receipt-content" class="receipt">
+            <div class="receipt-header">
+              <div class="receipt-title">PAY BOSS CAFE</div>
+              <div class="receipt-address">Jl. Tanjung Permai No 2 RT 07 Pembataan</div>
+              <div class="receipt-address">Murung Pudak. Tabalong</div>
+              <div class="receipt-address">HP : 0811-5194-456</div>
+            </div>
+            
+            <div class="receipt-body">
+              <div class="receipt-row">
+                <span>No. Struk:</span>
+                <span>${receiptNumber}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Tanggal:</span>
+                <span>${receiptDate.toLocaleDateString('id-ID')}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Waktu:</span>
+                <span>${receiptDate.toLocaleTimeString('id-ID')}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Kasir:</span>
+                <span>Admin</span>
+              </div>
+              
+              <div class="receipt-separator"></div>
+              
+              <div class="receipt-row">
+                <span>Pelanggan:</span>
+                <span>${rental.customer_name}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Telepon:</span>
+                <span>${rental.phone}</span>
+              </div>
+              
+              <div class="receipt-separator"></div>
+              
+              <div class="receipt-row">
+                <span>${room.name}</span>
+                <span></span>
+              </div>
+              <div class="receipt-row">
+                <span>Tipe Booking:</span>
+                <span>${rental.booking_type === 'open' ? 'Open Time' : rental.booking_type + ' Jam'}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Mulai:</span>
+                <span>${formatTime(rental.start_time)}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Selesai:</span>
+                <span>${formatTime(rental.end_time)}</span>
+              </div>
+              <div class="receipt-row">
+                <span>Durasi:</span>
+                <span>${rental.duration_hours.toFixed(1)} jam</span>
+              </div>
+              <div class="receipt-row">
+                <span>Harga/jam:</span>
+                <span>${formatCurrency(getPriceForRoom(room.type, config))}</span>
+              </div>
+              
+              <div class="receipt-separator"></div>
+              
+              <div class="receipt-row receipt-total">
+                <span>TOTAL BAYAR:</span>
+                <span>${formatCurrency(rental.total_price)}</span>
+              </div>
+            </div>
+            
+            <div class="receipt-footer">
+              <div>Instagram PAY BOSS CAFE</div>
+              <div>Terimakasih atas kunjungan anda.</div>
+              <div style="margin-top: 10px;">Instagram : @Payboss.cafe</div>
+              <div>Wifi : Pay Boss Cafe</div>
+              <div>Password : P4yB0sSC4F3</div>
+            </div>
+          </div>
+          
+          <div class="flex gap-3 mt-6">
+            <button onclick="printReceipt()" class="flex-1 py-3 rounded-lg font-semibold transition-all" 
+              style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: #ffffff;">
+              🖨️ Cetak Struk
+            </button>
+            <button onclick="closeReceiptModal()" class="flex-1 py-3 rounded-lg font-semibold transition-all" 
+              style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: #ffffff;">
+              Tutup
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+    }
+
+    function printReceipt() {
+      window.print();
+    }
+
+    function closeReceiptModal() {
+      const modal = document.getElementById('receipt-modal');
+      if (modal) modal.remove();
+    }
+
+    function openStartModal(roomId, config) {
+      const room = REFERENCE_ROOMS.find(r => r.id === roomId);
+      const pricePerHour = getPriceForRoom(room.type, config);
+      
+      const modal = document.createElement('div');
+      modal.id = 'rental-modal';
+      modal.className = 'fixed inset-0 flex items-center justify-center z-50 p-4';
+      modal.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      
+      modal.innerHTML = `
+        <div class="rounded-lg p-6 max-w-md w-full slide-in" style="background-color: ${window.elementSdk.config.surface_color || defaultConfig.surface_color};">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 1.5}px;">
+              ${room.icon} ${room.name}
+            </h2>
+            <button onclick="closeModal()" class="text-2xl" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color};">&times;</button>
+          </div>
+          
+          <div class="mb-4 p-3 rounded" style="background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+            <p style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;">
+              Harga: <span class="font-bold">${formatCurrency(pricePerHour)}/jam</span>
+            </p>
+          </div>
+
+          <form id="start-rental-form" class="space-y-4">
+            <div>
+              <label class="block mb-2 font-medium" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;">Nama Pelanggan</label>
+              <input type="text" id="customer-name" required class="w-full px-4 py-2 rounded border-2" 
+                style="background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color}; 
+                       color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; 
+                       border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color};
+                       font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;"
+                placeholder="Masukkan nama">
+            </div>
+            
+            <div>
+              <label class="block mb-2 font-medium" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;">Nomor Telepon</label>
+              <input type="tel" id="customer-phone" required class="w-full px-4 py-2 rounded border-2" 
+                style="background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color}; 
+                       color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; 
+                       border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color};
+                       font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;"
+                placeholder="08xx xxxx xxxx">
+            </div>
+
+            <div>
+              <label class="block mb-3 font-medium" style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;">Pilih Durasi Booking</label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="booking-option cursor-pointer">
+                  <input type="radio" name="booking-type" value="open" checked class="sr-only">
+                  <div class="p-3 rounded-lg border-2 text-center transition-all" 
+                    style="border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                           background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">
+                      ⏰ Open Time
+                    </div>
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      Bayar sesuai durasi
+                    </div>
+                  </div>
+                </label>
+                
+                <label class="booking-option cursor-pointer">
+                  <input type="radio" name="booking-type" value="1" class="sr-only">
+                  <div class="p-3 rounded-lg border-2 text-center transition-all" 
+                    style="border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                           background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">
+                      1️⃣ 1 Jam
+                    </div>
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ${formatCurrency(pricePerHour)}
+                    </div>
+                  </div>
+                </label>
+                
+                <label class="booking-option cursor-pointer">
+                  <input type="radio" name="booking-type" value="2" class="sr-only">
+                  <div class="p-3 rounded-lg border-2 text-center transition-all" 
+                    style="border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                           background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">
+                      2️⃣ 2 Jam
+                    </div>
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ${formatCurrency(pricePerHour * 2)}
+                    </div>
+                  </div>
+                </label>
+                
+                <label class="booking-option cursor-pointer">
+                  <input type="radio" name="booking-type" value="3" class="sr-only">
+                  <div class="p-3 rounded-lg border-2 text-center transition-all" 
+                    style="border-color: ${window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                           background-color: ${window.elementSdk.config.background_color || defaultConfig.background_color};">
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.9}px;">
+                      3️⃣ 3 Jam
+                    </div>
+                    <div style="color: ${window.elementSdk.config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(window.elementSdk.config.font_size || defaultConfig.font_size) * 0.75}px;">
+                      ${formatCurrency(pricePerHour * 3)}
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <button type="submit" data-room-id="${roomId}" class="start-btn w-full py-3 rounded-lg font-semibold transition-all" 
+              style="background-color: ${window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color}; 
+                     color: #ffffff;
+                     font-size: ${window.elementSdk.config.font_size || defaultConfig.font_size}px;">
+              Mulai Rental
+            </button>
+          </form>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      document.getElementById('customer-name').focus();
+
+      // Handle booking option selection
+      const bookingOptions = modal.querySelectorAll('.booking-option');
+      bookingOptions.forEach(option => {
+        option.addEventListener('click', () => {
+          // Remove selected state from all options
+          bookingOptions.forEach(opt => {
+            const div = opt.querySelector('div');
+            div.style.borderColor = window.elementSdk.config.secondary_action_color || defaultConfig.secondary_action_color;
+            div.style.backgroundColor = window.elementSdk.config.background_color || defaultConfig.background_color;
+          });
+          
+          // Add selected state to clicked option
+          const selectedDiv = option.querySelector('div');
+          selectedDiv.style.borderColor = window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color;
+          selectedDiv.style.backgroundColor = window.elementSdk.config.primary_action_color || defaultConfig.primary_action_color;
+          selectedDiv.style.opacity = '0.2';
+          
+          // Check the radio button
+          option.querySelector('input[type="radio"]').checked = true;
+        });
+      });
+
+      document.getElementById('start-rental-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const customerName = document.getElementById('customer-name').value;
+        const phone = document.getElementById('customer-phone').value;
+        const bookingType = document.querySelector('input[name="booking-type"]:checked').value;
+        await startRental(roomId, customerName, phone, bookingType, window.elementSdk.config);
+      });
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('rental-modal');
+      if (modal) modal.remove();
+    }
+
+    function renderApp(config) {
+      const app = document.getElementById('app');
+      
+      const activeRentals = allRentals.filter(r => r.status === 'active');
+      const completedRentals = allRentals.filter(r => r.status === 'completed').slice(0, 10);
+
+      const availableRooms = REFERENCE_ROOMS.filter(room => 
+        !activeRentals.some(rental => rental.room_id === room.id)
+      );
+
+      app.innerHTML = `
+        <div class="min-h-full p-6" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div class="max-w-7xl mx-auto">
+            <header class="mb-8 text-center">
+              <h1 class="font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">
+                ${config.app_title || defaultConfig.app_title}
+              </h1>
+              <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                Sistem Manajemen Rental Otomatis
+              </p>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                <h2 class="font-bold mb-4 flex items-center gap-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
+                  <span class="pulse-animation">🟢</span> Ruangan Tersedia
+                </h2>
+                
+                <div class="space-y-3" id="available-rooms">
+                  ${availableRooms.length === 0 ? 
+                    `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${config.font_size || defaultConfig.font_size}px;">Semua ruangan sedang digunakan</p>` :
+                    availableRooms.map(room => {
+                      const price = getPriceForRoom(room.type, config);
+                      return `
+                        <div class="room-card rounded-lg p-4 flex items-center justify-between" 
+                          style="background-color: ${config.background_color || defaultConfig.background_color};">
+                          <div class="flex items-center gap-3">
+                            <span style="font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">${room.icon}</span>
+                            <div>
+                              <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.1}px;">
+                                ${room.name}
+                              </h3>
+                              <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                                ${formatCurrency(price)}/jam
+                              </p>
+                            </div>
+                          </div>
+                          <button onclick="openStartModal('${room.id}', window.elementSdk.config)" 
+                            class="px-4 py-2 rounded-lg font-medium transition-all"
+                            style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; 
+                                   color: #ffffff;
+                                   font-size: ${config.font_size || defaultConfig.font_size}px;">
+                            Mulai
+                          </button>
+                        </div>
+                      `;
+                    }).join('')
+                  }
+                </div>
+              </div>
+
+              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                <h2 class="font-bold mb-4 flex items-center gap-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
+                  <span class="pulse-animation">🔴</span> Sedang Berjalan
+                </h2>
+                
+                <div class="space-y-3" id="active-rentals">
+                  ${activeRentals.length === 0 ? 
+                    `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${config.font_size || defaultConfig.font_size}px;">Belum ada rental aktif</p>` :
+                    activeRentals.map(rental => {
+                      const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+                      const duration = calculateDuration(rental.start_time);
+                      const hours = Math.floor(duration);
+                      const minutes = Math.floor((duration - hours) * 60);
+                      const pricePerHour = getPriceForRoom(room.type, config);
+                      
+                      // Handle different booking types
+                      let currentPrice, durationDisplay, bookingInfo;
+                      
+                      if (rental.booking_type === 'open') {
+                        currentPrice = Math.ceil(duration * pricePerHour);
+                        durationDisplay = `${hours} jam ${minutes} menit`;
+                        bookingInfo = '⏰ Open Time';
+                      } else {
+                        const bookedHours = parseInt(rental.booking_type);
+                        const remainingTime = bookedHours - duration;
+                        
+                        if (remainingTime > 0) {
+                          const remainingHours = Math.floor(remainingTime);
+                          const remainingMinutes = Math.floor((remainingTime - remainingHours) * 60);
+                          durationDisplay = `Sisa: ${remainingHours}j ${remainingMinutes}m`;
+                          bookingInfo = `🕐 ${bookedHours} Jam (Booked)`;
+                        } else {
+                          durationDisplay = 'Waktu Habis!';
+                          bookingInfo = `🕐 ${bookedHours} Jam (Expired)`;
+                        }
+                        currentPrice = rental.total_price;
+                      }
+                      
+                      return `
+                        <div data-rental-id="${rental.__backendId}" class="rounded-lg p-4" 
+                          style="background-color: ${config.background_color || defaultConfig.background_color}; border-left: 4px solid ${config.primary_action_color || defaultConfig.primary_action_color};">
+                          <div class="flex items-start justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                              <span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">${room.icon}</span>
+                              <div>
+                                <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.1}px;">
+                                  ${room.name}
+                                </h3>
+                                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
+                                  ${rental.customer_name}
+                                </p>
+                              </div>
+                            </div>
+                            <div class="text-right">
+                              <span style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.8}px;">
+                                ${bookingInfo}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div class="space-y-2 mb-3">
+                            <div class="flex justify-between" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                              <span style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">Mulai:</span>
+                              <span class="font-medium" style="color: ${config.text_color || defaultConfig.text_color};">
+                                ${formatTime(rental.start_time)}
+                              </span>
+                            </div>
+                            <div class="flex justify-between" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                              <span style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
+                                ${rental.booking_type === 'open' ? 'Durasi:' : 'Status:'}
+                              </span>
+                              <span class="duration-display font-medium" style="color: ${config.primary_action_color || defaultConfig.primary_action_color};">
+                                ${durationDisplay}
+                              </span>
+                            </div>
+                            <div class="flex justify-between" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                              <span style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
+                                ${rental.booking_type === 'open' ? 'Total Saat Ini:' : 'Total Bayar:'}
+                              </span>
+                              <span class="current-price font-bold" style="color: ${config.text_color || defaultConfig.text_color};">
+                                ${formatCurrency(currentPrice)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button onclick="endRental(allRentals.find(r => r.__backendId === '${rental.__backendId}'), window.elementSdk.config)" 
+                            class="end-btn w-full py-2 rounded-lg font-medium transition-all"
+                            style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; 
+                                   color: #ffffff;
+                                   font-size: ${config.font_size || defaultConfig.font_size}px;">
+                            Selesai
+                          </button>
+                        </div>
+                      `;
+                    }).join('')
+                  }
+                </div>
+              </div>
+            </div>
+
+            ${completedRentals.length > 0 ? `
+              <div class="rounded-lg p-6" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+                <h2 class="font-bold mb-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.3}px;">
+                  📋 Riwayat Terakhir
+                </h2>
+                
+                <div class="overflow-x-auto">
+                  <table class="w-full" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
+                    <thead>
+                      <tr style="border-bottom: 2px solid ${config.background_color || defaultConfig.background_color};">
+                        <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Ruangan</th>
+                        <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Pelanggan</th>
+                        <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Tanggal</th>
+                        <th class="text-left p-3" style="color: ${config.text_color || defaultConfig.text_color};">Durasi</th>
+                        <th class="text-right p-3" style="color: ${config.text_color || defaultConfig.text_color};">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${completedRentals.map(rental => {
+                        const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+                        return `
+                          <tr style="border-bottom: 1px solid ${config.background_color || defaultConfig.background_color};">
+                            <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
+                              ${room.icon} ${room.name}
+                            </td>
+                            <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
+                              ${rental.customer_name}
+                            </td>
+                            <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
+                              ${formatDate(rental.start_time)}
+                            </td>
+                            <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
+                              ${rental.duration_hours.toFixed(1)} jam
+                            </td>
+                            <td class="p-3 text-right font-semibold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color};">
+                              ${formatCurrency(rental.total_price)}
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+
+      activeRentals.forEach(rental => {
+        startTimer(rental, config);
+      });
+    }
+
+    const dataHandler = {
+      onDataChanged(data) {
+        allRentals = data;
+        renderApp(window.elementSdk.config);
+      }
+    };
+
+    async function onConfigChange(config) {
+      renderApp(config);
+    }
+
+    window.elementSdk.init({
+      defaultConfig,
+      onConfigChange,
+      mapToCapabilities: (config) => ({
+        recolorables: [
+          {
+            get: () => config.background_color || defaultConfig.background_color,
+            set: (value) => {
+              config.background_color = value;
+              window.elementSdk.setConfig({ background_color: value });
+            }
+          },
+          {
+            get: () => config.surface_color || defaultConfig.surface_color,
+            set: (value) => {
+              config.surface_color = value;
+              window.elementSdk.setConfig({ surface_color: value });
+            }
+          },
+          {
+            get: () => config.text_color || defaultConfig.text_color,
+            set: (value) => {
+              config.text_color = value;
+              window.elementSdk.setConfig({ text_color: value });
+            }
+          },
+          {
+            get: () => config.primary_action_color || defaultConfig.primary_action_color,
+            set: (value) => {
+              config.primary_action_color = value;
+              window.elementSdk.setConfig({ primary_action_color: value });
+            }
+          },
+          {
+            get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+            set: (value) => {
+              config.secondary_action_color = value;
+              window.elementSdk.setConfig({ secondary_action_color: value });
+            }
+          }
+        ],
+        borderables: [],
+        fontEditable: {
+          get: () => config.font_family || defaultConfig.font_family,
+          set: (value) => {
+            config.font_family = value;
+            window.elementSdk.setConfig({ font_family: value });
+          }
+        },
+        fontSizeable: {
+          get: () => config.font_size || defaultConfig.font_size,
+          set: (value) => {
+            config.font_size = value;
+            window.elementSdk.setConfig({ font_size: value });
+          }
+        }
+      }),
+      mapToEditPanelValues: (config) => new Map([
+        ['app_title', config.app_title || defaultConfig.app_title],
+        ['billiard_price', config.billiard_price || defaultConfig.billiard_price],
+        ['karaoke_price', config.karaoke_price || defaultConfig.karaoke_price],
+        ['massage_price', config.massage_price || defaultConfig.massage_price]
+      ])
+    });
+
+    window.dataSdk.init(dataHandler).then(result => {
+      if (!result.isOk) {
+        showToast('Gagal menginisialisasi aplikasi', 'error');
+      }
+    });
+
+    window.openStartModal = openStartModal;
+    window.closeModal = closeModal;
+    window.endRental = endRental;
+    window.printReceipt = printReceipt;
+    window.closeReceiptModal = closeReceiptModal;
+    window.allRentals = allRentals;
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99956d538324fd39',t:'MTc2MjI3MzEwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
