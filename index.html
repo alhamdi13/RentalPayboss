@@ -172,7 +172,7 @@
       onAuthStateChanged(auth, (user) => {
         if (user) {
           userId = user.uid;
-          console.log("Firebase User authenticated:", userId);
+          console.log("Firebase User authenticated:", user); // Log lebih detail
           // User sudah login, muat data booking
           loadBookings();
         } else {
@@ -202,14 +202,20 @@
     
     // Fungsi baru untuk memuat dan mendengarkan data booking
     function loadBookings() {
-      if (!userId) return; // Jangan muat jika user ID belum ada
+      if (!userId) {
+        console.log("loadBookings skipped: userId not available.");
+        return; 
+      }
       
       // Hentikan listener sebelumnya jika ada
       if (unsubscribeBookings) {
         unsubscribeBookings();
       }
 
-      const collectionRef = collection(db, 'artifacts', appId, 'users', userId, 'bookings');
+      // DIMODIFIKASI: Path dikembalikan ke users/{userId}/bookings
+      // Ini adalah path yang aman dan benar secara struktur.
+      const collectionRef = collection(db, 'users', userId, 'bookings');
+      console.log('Attempting to listen to Firestore at path:', collectionRef.path);
       
       // Dengarkan perubahan data secara real-time
       unsubscribeBookings = onSnapshot(collectionRef, (snapshot) => {
@@ -221,6 +227,7 @@
         dataHandler.onDataChanged(bookingsData);
       }, (error) => {
         console.error("Error listening to Firestore:", error);
+        console.error("PASTIKAN FIREBASE SECURITY RULES ANDA MENGIZINKAN AKSES 'read' ke path:", collectionRef.path);
       });
     }
 
@@ -425,8 +432,9 @@
       submitBtn.textContent = 'Menyimpan...';
       
       try {
-        // Ganti window.dataSdk.create dengan addDoc
-        const collectionRef = collection(db, 'artifacts', appId, 'users', userId, 'bookings');
+        // DIMODIFIKASI: Path dikembalikan ke users/{userId}/bookings
+        const collectionRef = collection(db, 'users', userId, 'bookings');
+        console.log('Attempting to write to Firestore at path:', collectionRef.path);
         await addDoc(collectionRef, booking);
         
         // onSnapshot akan otomatis update UI
@@ -435,6 +443,7 @@
 
       } catch (error) {
         console.error("Error adding document: ", error);
+        console.error("PASTIKAN FIREBASE SECURITY RULES ANDA MENGIZINKAN AKSES 'create' ke path:", collectionRef.path);
         alert('Gagal menyimpan booking. Silakan coba lagi.');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Simpan Booking';
@@ -469,8 +478,9 @@
            return;
         }
 
-        // Ganti window.dataSdk.update dengan updateDoc
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'bookings', booking.id);
+        // DIMODIFIKASI: Path dikembalikan ke users/{userId}/bookings
+        const docRef = doc(db, 'users', userId, 'bookings', booking.id);
+        console.log('Attempting to update Firestore doc at path:', docRef.path);
         
         try {
           await updateDoc(docRef, {
@@ -487,6 +497,7 @@
 
         } catch (error) {
           console.error("Error updating document: ", error);
+          console.error("PASTIKAN FIREBASE SECURITY RULES ANDA MENGIZINKAN AKSES 'update' ke path:", docRef.path);
           alert("Gagal melakukan checkout. Coba lagi.");
           document.body.removeChild(confirmDiv);
         }
