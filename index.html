@@ -294,6 +294,7 @@
         // Ambil ID dokumen dan hapus dari objek
         const docId = rental.__backendId;
         if (!docId) {
+          console.error("dataSdk.update dipanggil tanpa __backendId");
           return { isOk: false, error: "Missing document ID" };
         }
         
@@ -306,7 +307,10 @@
           await window.setDoc(docRef, dataToSave, { merge: true }); // Gunakan setDoc dengan merge
           return { isOk: true };
         } catch (error) {
-          console.error("Error updating document: ", error);
+          // *** TAMBAHAN LOGGING DI SINI ***
+          console.error("Error di dalam dataSdk.update: ", error);
+          console.error("Data yang gagal disimpan: ", dataToSave);
+          console.error("Doc ID: ", docId);
           return { isOk: false, error };
         }
       },
@@ -435,6 +439,8 @@
       }
 
       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+      if (!room) return; // Tambahan keamanan jika ruangan tidak ditemukan
+      
       const pricePerHour = getPriceForRoom(room.type, config);
       
       // Update harga hanya jika 'open time'
@@ -497,10 +503,38 @@
       }
     }
 
+    // *** FUNGSI HELPER BARU ***
+    // Dibungkus agar aman dipanggil dari HTML
+    function handleEndRentalClick(rentalId) {
+      console.log(`handleEndRentalClick dipanggil untuk ID: ${rentalId}`);
+      // Temukan rental dari state allRentals saat ini
+      const rental = window.allRentals.find(r => r.__backendId === rentalId);
+      const config = window.elementSdk.config;
+    
+      // Panggil fungsi endRental yang asli
+      // Pengecekan 'if (!rental)' di dalam endRental akan menangani jika tidak ditemukan
+      window.endRental(rental, config);
+    }
+    window.handleEndRentalClick = handleEndRentalClick; // Pasang ke window
+
+    // Fungsi endRental yang asli, sekarang dipanggil oleh handleEndRentalClick
     async function endRental(rental, config) {
+      if (!rental) {
+        console.error("Fungsi endRental dipanggil tanpa data rental (rental adalah undefined).");
+        showToast("Error: Data rental tidak ditemukan", "error");
+        return;
+      }
+
       const endTime = new Date().toISOString();
       const duration = calculateDuration(rental.start_time);
       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
+      
+      if (!room) {
+        console.error(`Error: Ruangan dengan ID "${rental.room_id}" tidak ditemukan di REFERENCE_ROOMS.`);
+        showToast("Error: Konfigurasi ruangan tidak ditemukan", "error");
+        return;
+      }
+
       const pricePerHour = getPriceForRoom(room.type, config);
       
       let totalPrice;
@@ -544,13 +578,16 @@
         // Tampilkan struk
         showReceiptModal(updatedRental, room, config);
       } else {
-        showToast('Gagal menyelesaikan rental: ' + result.error, 'error');
+        // *** LOGGING DIPERBARUI DI SINI ***
+        console.error("GAGAL UPDATE RENTAL:", result.error);
+        showToast('Gagal menyelesaikan rental. Cek konsol (F12) untuk error.', 'error');
         if (loadingBtn) {
           loadingBtn.disabled = false;
           loadingBtn.textContent = 'Selesai';
         }
       }
     }
+    window.endRental = endRental; // Tetap pasang ke window
 
     function showReceiptModal(rental, room, config) {
       const modal = document.createElement('div');
@@ -898,8 +935,8 @@
         return rentalDate === today;
       });
       
-      const todayRevenue = todayRentals.reduce((sum, rental) => sum + rental.total_price, 0);
-      const totalRevenue = completedRentals.reduce((sum, rental) => sum + rental.total_price, 0);
+      const todayRevenue = todayRentals.reduce((sum, rental) => sum + (rental.total_price || 0), 0);
+      const totalRevenue = completedRentals.reduce((sum, rental) => sum + (rental.total_price || 0), 0);
 
 
       app.innerHTML = `
@@ -1031,11 +1068,11 @@
                       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
                       
                       // Inisialisasi variabel, akan di-update oleh startTimer
-                      let currentPrice = rental.total_price;
+                      let currentPrice = rental.total_price || 0;
                       let durationDisplay = 'Memuat...';
                       let bookingInfo = 'Memuat...';
 
-                      if (rental.booking_type === 'open') {
+                      if (rental.booking_type === 'open' && room) {
                         // Perkiraan awal
                         const duration = calculateDuration(rental.start_time);
                         currentPrice = Math.ceil(duration * getPriceForRoom(room.type, config));
@@ -1046,10 +1083,10 @@
                           style="background-color: ${config.background_color || defaultConfig.background_color}; border-left: 4px solid ${config.primary_action_color || defaultConfig.primary_action_color};">
                           <div class="flex items-start justify-between mb-3">
                             <div class="flex items-center gap-2">
-                              <span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">${room.icon}</span>
+                              <span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">${room?.icon || '❓'}</span>
                               <div>
                                 <h3 class="font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.1}px;">
-                                  ${room.name}
+                                  ${room?.name || 'Ruangan Dihapus'}
                                 </h3>
                                 <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.85}px;">
                                   ${rental.customer_name}
@@ -1088,7 +1125,8 @@
                             </div>
                           </div>
 
-                          <button onclick="endRental(allRentals.find(r => r.__backendId === '${rental.__backendId}'), window.elementSdk.config)" 
+                          <!-- *** PERUBAHAN DI SINI *** -->
+                          <button onclick="handleEndRentalClick('${rental.__backendId}')" 
                             class="end-btn w-full py-2 rounded-lg font-medium transition-all gradient-secondary hover:scale-105"
                             style="color: #ffffff;
                                    font-size: ${config.font_size || defaultConfig.font_size}px;
@@ -1146,7 +1184,7 @@
                         return `
                           <tr style="border-bottom: 1px solid ${config.background_color || defaultConfig.background_color};">
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
-                              ${room.icon} ${room.name}
+                              ${room?.icon || '❓'} ${room?.name || 'Ruangan Dihapus'}
                             </td>
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
                               ${rental.customer_name}
@@ -1156,10 +1194,10 @@
                               ${formatDate(rental.end_time)}
                             </td>
                             <td class="p-3" style="color: ${config.text_color || defaultConfig.text_color};">
-                              ${rental.duration_hours.toFixed(1)} jam
+                              ${(rental.duration_hours || 0).toFixed(1)} jam
                             </td>
                             <td class="p-3 text-right font-semibold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color};">
-                              ${formatCurrency(rental.total_price)}
+                              ${formatCurrency(rental.total_price || 0)}
                             </td>
                             ${isManager ? `
                               <td class="p-3 text-center">
@@ -1192,7 +1230,7 @@
                       </div>
                       <div>
                         <div class="font-bold" style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.2}px;">
-                          ${(completedRentals.reduce((sum, r) => sum + r.duration_hours, 0)).toFixed(1)} jam
+                          ${(completedRentals.reduce((sum, r) => sum + (r.duration_hours || 0), 0)).toFixed(1)} jam
                         </div>
                         <div style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size) * 0.9}px;">
                           Total Durasi
@@ -1226,13 +1264,17 @@
       
       // Mulai timer untuk rental yang aktif
       activeRentals.forEach(rental => {
-        startTimer(rental, config);
+        // Pastikan rental dan config valid sebelum memulai timer
+        if (rental && config) {
+          startTimer(rental, config);
+        }
       });
     }
 
     const dataHandler = {
       onDataChanged(data) {
-        allRentals = data;
+        allRentals = data; // Update module-scoped variable (for renderApp)
+        window.allRentals = data; // <-- FIX: Update window-scoped variable (for handleEndRentalClick)
         renderApp(window.elementSdk.config);
       }
     };
@@ -1292,15 +1334,15 @@
         const startDate = new Date(rental.start_time);
         const endDate = new Date(rental.end_time);
         
-        csvContent += `"${room.name}","${rental.customer_name}","${rental.phone}",`;
+        csvContent += `"${room?.name || 'N/A'}","${rental.customer_name}","${rental.phone}",`;
         csvContent += `"${endDate.toLocaleDateString('id-ID')}","${startDate.toLocaleTimeString('id-ID')}",`;
-        csvContent += `"${endDate.toLocaleTimeString('id-ID')}","${rental.duration_hours.toFixed(2)}",`;
+        csvContent += `"${endDate.toLocaleTimeString('id-ID')}","${(rental.duration_hours || 0).toFixed(2)}",`;
         csvContent += `"${rental.booking_type === 'open' ? 'Open Time' : rental.booking_type + ' Jam'}",`;
-        csvContent += `"${rental.total_price}"\n`;
+        csvContent += `"${rental.total_price || 0}"\n`;
       });
       
-      const totalRevenue = dataToExport.reduce((sum, rental) => sum + rental.total_price, 0);
-      const totalDuration = dataToExport.reduce((sum, rental) => sum + rental.duration_hours, 0);
+      const totalRevenue = dataToExport.reduce((sum, rental) => sum + (rental.total_price || 0), 0);
+      const totalDuration = dataToExport.reduce((sum, rental) => sum + (rental.duration_hours || 0), 0);
       
       csvContent += `\nRingkasan:\n`;
       csvContent += `Total Transaksi,"${dataToExport.length}"\n`;
@@ -1323,13 +1365,13 @@
     // Pasang fungsi ke window agar bisa di-klik
     window.openStartModal = openStartModal;
     window.closeModal = closeModal;
-    window.endRental = endRental;
+    // window.endRental = endRental; // endRental sekarang dipanggil oleh handleEndRentalClick
     window.printReceipt = printReceipt;
     window.closeReceiptModal = closeReceiptModal;
     window.showRoleSelector = showRoleSelector;
     window.selectRole = selectRole;
     window.exportReport = exportReport;
-    window.allRentals = allRentals;
+    /* window.allRentals = allRentals; */ // <-- DIHAPUS: Baris ini tidak perlu lagi
     window.REFERENCE_ROOMS = REFERENCE_ROOMS;
 
     // -----------------------------------------------------------------
@@ -1367,7 +1409,7 @@
 
   </script>
 </head>
-<body class="antialiased">
+<body class="antliasised">
   <div id="app" class="min-h-full">
     <!-- Konten aplikasi akan dirender di sini oleh renderApp() -->
     <div class="flex items-center justify-center min-h-screen">
@@ -1379,4 +1421,3 @@
   </div>
 </body>
 </html>
-
