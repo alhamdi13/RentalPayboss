@@ -148,7 +148,16 @@
     );
     
     // Ambil App ID dari variabel global
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    // const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    
+    // --- PERBAIKAN: Hardcode App ID agar cocok dengan Firebase Rules ---
+    // Aturan Firebase Anda di-set untuk App ID spesifik ini.
+    const appId = "1:759463472912:web:f209186894c5fc6cb3ff95";
+    
+    if (typeof __app_id !== 'undefined' && __app_id !== appId) {
+        console.warn("Peringatan: App ID lingkungan (" + __app_id + ") tidak cocok dengan App ID di kode (" + appId + ").");
+    }
+
 
     // Periksa apakah konfigurasi ada
     if (!firebaseConfig.apiKey) {
