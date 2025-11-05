@@ -8,12 +8,107 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
+  <!-- CSS Kustom untuk Animasi dan Struk -->
+  <style>
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      z-index: 1000;
+      animation: fadeInOut 3s ease-in-out;
+    }
+    .slide-in {
+      animation: slideIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .pulse-animation {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .gradient-bg {
+      background-image: linear-gradient(to right, #06b6d4, #3b82f6);
+    }
+    .gradient-secondary {
+      background-image: linear-gradient(to right, #f59e0b, #ef4444);
+    }
+    .card-shadow {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Struk Printer-friendly */
+    .receipt {
+      font-family: 'Courier New', Courier, monospace;
+      color: #000;
+      max-width: 300px; /* Lebar umum struk thermal */
+      margin: 0 auto;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .receipt-header { text-align: center; margin-bottom: 10px; }
+    .receipt-title { font-size: 16px; font-weight: bold; text-transform: uppercase; }
+    .receipt-address { font-size: 11px; }
+    .receipt-body { margin-bottom: 10px; }
+    .receipt-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .receipt-row span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+    .receipt-separator { border-top: 1px dashed #000; margin: 8px 0; }
+    .receipt-total { font-weight: bold; font-size: 14px; padding-top: 5px; }
+    .receipt-footer { text-align: center; margin-top: 10px; font-size: 11px; }
+    
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      15%, 85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes slideIn {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+
+    /* Print Styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #receipt-modal, #receipt-modal * {
+        visibility: visible;
+      }
+      #receipt-modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #fff !important;
+        padding: 0;
+      }
+      #receipt-modal > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-shadow: none;
+        padding: 10px;
+        background-color: #fff !important;
+      }
+      #receipt-content {
+        color: #000 !important;
+      }
+      /* Sembunyikan tombol saat print */
+      #receipt-modal .flex.gap-3, #receipt-modal .flex.items-center.justify-between {
+        display: none;
+      }
+    }
+  </style>
+
   <!-- SATU BLOK SCRIPT TUNGGAL UNTUK MENGHINDARI RACE CONDITION -->
   <script type="module">
-    // Impor fungsi-fungsi yang kita butuhkan dari Firebase SDK
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+    // Impor fungsi-fungsi yang kita butuhkan dari Firebase SDK (Versi diperbarui)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
     import { 
       getFirestore, 
       collection, 
@@ -23,8 +118,9 @@
       onSnapshot,
       query,
       where,
-      getDocs
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      getDocs,
+      setLogLevel // Ditambahkan untuk debugging
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // DEFINISI showToast dipindahkan ke atas agar bisa menangani error
     window.showToast = function(message, type = 'success') {
@@ -41,26 +137,37 @@
     }
 
     // -----------------------------------------------------------------
-    // KONFIGURASI FIREBASE
+    // KONFIGURASI FIREBASE (DIPERBAIKI - Menggunakan variabel global)
     // -----------------------------------------------------------------
-    const firebaseConfig = {
-      apiKey: "AIzaSyCjRY87p_EzrxkVB7HG13bozEUnf6C-63Y",
-      authDomain: "rental-manager-a4d21.firebaseapp.com",
-      projectId: "rental-manager-a4d21",
-      storageBucket: "rental-manager-a4d21.firebasestorage.app",
-      messagingSenderId: "759463472912",
-      appId: "1:759463472912:web:f209186894c5fc6cb3ff95",
-      measurementId: "G-704L1DTJKT"
-    };
+    
+    // Ambil konfigurasi dari variabel global yang disediakan oleh lingkungan
+    const firebaseConfig = JSON.parse(
+      typeof __firebase_config !== 'undefined' 
+        ? __firebase_config 
+        : '{}'
+    );
+    
+    // Ambil App ID dari variabel global
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+    // Periksa apakah konfigurasi ada
+    if (!firebaseConfig.apiKey) {
+        console.error("Konfigurasi Firebase tidak ditemukan!");
+        showToast('Error: Konfigurasi server tidak ditemukan.', 'error');
+    }
 
     // Inisialisasi Firebase
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
+    // const analytics = getAnalytics(app); // Dihapus karena tidak digunakan
     const auth = getAuth(app);
     const db = getFirestore(app);
     
-    // Buat referensi koleksi
-    const rentalsCollection = collection(db, "rentals");
+    // Aktifkan log untuk debugging
+    setLogLevel('Debug');
+
+    // Buat referensi koleksi (DIPERBAIKI - Menggunakan path yang benar)
+    // Path harus /artifacts/{appId}/public/data/{collectionName}
+    const rentalsCollection = collection(db, "artifacts", appId, "public", "data", "rentals");
 
     // Pasang variabel global
     window.db = db;
@@ -76,7 +183,14 @@
 
     // Pasang listener untuk data rental
     function setupRealtimeListener(dataHandler) {
-      const q = query(rentalsCollection);
+      // Periksa apakah rentalsCollection sudah terdefinisi
+      if (!window.rentalsCollection) {
+        console.error("rentalsCollection belum diinisialisasi.");
+        showToast('Gagal terhubung ke database.', 'error');
+        return;
+      }
+      
+      const q = query(window.rentalsCollection);
       
       onSnapshot(q, (snapshot) => {
         const rentals = snapshot.docs.map(doc => ({
@@ -166,6 +280,7 @@
       // Fungsi untuk membuat data baru di Firestore
       async create(data) {
         try {
+          // Gunakan window.rentalsCollection yang sudah diinisialisasi dengan path benar
           await window.addDoc(window.rentalsCollection, data);
           return { isOk: true };
         } catch (error) {
@@ -186,8 +301,9 @@
         const { __backendId, ...dataToSave } = rental;
         
         try {
-          const docRef = window.doc(window.db, "rentals", docId);
-          await window.setDoc(docRef, dataToSave);
+          // Gunakan path lengkap dari rentalsCollection
+          const docRef = window.doc(window.rentalsCollection, docId);
+          await window.setDoc(docRef, dataToSave, { merge: true }); // Gunakan setDoc dengan merge
           return { isOk: true };
         } catch (error) {
           console.error("Error updating document: ", error);
@@ -260,9 +376,12 @@
         clearInterval(activeTimers.get(rental.__backendId));
       }
 
+      // Perbarui tampilan segera
+      updateRentalDisplay(rental, config);
+      
       const timer = setInterval(() => {
         updateRentalDisplay(rental, config);
-      }, 60000);
+      }, 60000); // Perbarui setiap menit
 
       activeTimers.set(rental.__backendId, timer);
     }
@@ -282,9 +401,37 @@
       const hours = Math.floor(duration);
       const minutes = Math.floor((duration - hours) * 60);
       
+      let durationDisplay, bookingInfo;
+      
+      if (rental.booking_type === 'open') {
+          durationDisplay = `${hours} jam ${minutes} menit`;
+          bookingInfo = '⏰ Open Time';
+      } else {
+          const bookedHours = parseInt(rental.booking_type);
+          const remainingTime = bookedHours - duration;
+          
+          if (remainingTime > 0) {
+              const remainingHours = Math.floor(remainingTime);
+              const remainingMinutes = Math.floor((remainingTime - remainingHours) * 60);
+              durationDisplay = `Sisa: ${remainingHours}j ${remainingMinutes}m`;
+              bookingInfo = `🕐 ${bookedHours} Jam (Booked)`;
+          } else {
+              const overTime = duration - bookedHours;
+              const overHours = Math.floor(overTime);
+              const overMinutes = Math.floor((overTime - overHours) * 60);
+              durationDisplay = `Lewat: ${overHours}j ${overMinutes}m`;
+              bookingInfo = `🕐 ${bookedHours} Jam (Expired)`;
+          }
+      }
+
       const durationEl = card.querySelector('.duration-display');
       if (durationEl) {
-        durationEl.textContent = `${hours} jam ${minutes} menit`;
+        durationEl.textContent = durationDisplay;
+      }
+      
+      const bookingInfoEl = card.querySelector('.booking-info');
+      if (bookingInfoEl) {
+          bookingInfoEl.textContent = bookingInfo;
       }
 
       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
@@ -397,7 +544,7 @@
         // Tampilkan struk
         showReceiptModal(updatedRental, room, config);
       } else {
-        showToast('Gagal menyelesaikan rental', 'error');
+        showToast('Gagal menyelesaikan rental: ' + result.error, 'error');
         if (loadingBtn) {
           loadingBtn.disabled = false;
           loadingBtn.textContent = 'Selesai';
@@ -730,11 +877,15 @@
     function renderApp(config) {
       const app = document.getElementById('app');
       
+      // Hentikan semua timer lama sebelum me-render ulang
+      activeTimers.forEach(timer => clearInterval(timer));
+      activeTimers.clear();
+
       // Urutkan data: rental aktif dulu, lalu rental selesai terbaru
       const activeRentals = allRentals.filter(r => r.status === 'active');
       const completedRentals = allRentals
-          .filter(r => r.status === 'completed')
-          .sort((a, b) => new Date(b.end_time) - new Date(a.end_time)); // Urutkan terbaru dulu
+        .filter(r => r.status === 'completed')
+        .sort((a, b) => new Date(b.end_time) - new Date(a.end_time)); // Urutkan terbaru dulu
 
       const availableRooms = REFERENCE_ROOMS.filter(room => 
         !activeRentals.some(rental => rental.room_id === room.id)
@@ -752,7 +903,7 @@
 
 
       app.innerHTML = `
-        <div class="min-h-full p-6" style="background-color: ${config.background_color || defaultConfig.background_color};">
+        <div class="min-h-full p-6" style="background-color: ${config.background_color || defaultConfig.background_color}; font-family: ${config.font_family || defaultConfig.font_family};">
           <div class="max-w-7xl mx-auto">
             <header class="mb-8">
               <div class="flex items-center justify-between mb-4">
@@ -878,34 +1029,16 @@
                     `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${config.font_size || defaultConfig.font_size}px;">Belum ada rental aktif</p>` :
                     activeRentals.map(rental => {
                       const room = REFERENCE_ROOMS.find(r => r.id === rental.room_id);
-                      const duration = calculateDuration(rental.start_time);
-                      const hours = Math.floor(duration);
-                      const minutes = Math.floor((duration - hours) * 60);
                       
-                      // Handle different booking types
-                      let currentPrice, durationDisplay, bookingInfo;
-                      
+                      // Inisialisasi variabel, akan di-update oleh startTimer
+                      let currentPrice = rental.total_price;
+                      let durationDisplay = 'Memuat...';
+                      let bookingInfo = 'Memuat...';
+
                       if (rental.booking_type === 'open') {
+                        // Perkiraan awal
+                        const duration = calculateDuration(rental.start_time);
                         currentPrice = Math.ceil(duration * getPriceForRoom(room.type, config));
-                        durationDisplay = `${hours} jam ${minutes} menit`;
-                        bookingInfo = '⏰ Open Time';
-                      } else {
-                        const bookedHours = parseInt(rental.booking_type);
-                        const remainingTime = bookedHours - duration;
-                        
-                        if (remainingTime > 0) {
-                          const remainingHours = Math.floor(remainingTime);
-                          const remainingMinutes = Math.floor((remainingTime - remainingHours) * 60);
-                          durationDisplay = `Sisa: ${remainingHours}j ${remainingMinutes}m`;
-                          bookingInfo = `🕐 ${bookedHours} Jam (Booked)`;
-                        } else {
-                          const overTime = duration - bookedHours;
-                          const overHours = Math.floor(overTime);
-                          const overMinutes = Math.floor((overTime - overHours) * 60);
-                          durationDisplay = `Lewat: ${overHours}j ${overMinutes}m`;
-                          bookingInfo = `🕐 ${bookedHours} Jam (Expired)`;
-                        }
-                        currentPrice = rental.total_price;
                       }
                       
                       return `
@@ -924,7 +1057,7 @@
                               </div>
                             </div>
                             <div class="text-right">
-                              <span style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.8}px;">
+                              <span class="booking-info" style="color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.8}px;">
                                 ${bookingInfo}
                               </span>
                             </div>
@@ -1082,6 +1215,16 @@
         </div>
       `;
 
+      // Hapus timer yang sudah selesai (untuk rental yang tidak lagi aktif)
+      const activeRentalIds = new Set(activeRentals.map(r => r.__backendId));
+      activeTimers.forEach((timer, id) => {
+          if (!activeRentalIds.has(id)) {
+              clearInterval(timer);
+              activeTimers.delete(id);
+          }
+      });
+      
+      // Mulai timer untuk rental yang aktif
       activeRentals.forEach(rental => {
         startTimer(rental, config);
       });
@@ -1140,8 +1283,8 @@
       const reportTitle = type === 'today' ? 'Laporan Harian' : 'Laporan Lengkap';
       const reportDate = new Date().toLocaleDateString('id-ID');
       
-      let csvContent = `${config.app_title || defaultConfig.app_title}\n`;
-      csvContent += `${reportTitle} - ${reportDate}\n\n`;
+      let csvContent = `"${config.app_title || defaultConfig.app_title}"\n`;
+      csvContent += `"${reportTitle} - ${reportDate}"\n\n`;
       csvContent += `Ruangan,Pelanggan,Telepon,Tanggal,Waktu Mulai,Waktu Selesai,Durasi (jam),Tipe Booking,Total\n`;
       
       dataToExport.forEach(rental => {
@@ -1160,7 +1303,7 @@
       const totalDuration = dataToExport.reduce((sum, rental) => sum + rental.duration_hours, 0);
       
       csvContent += `\nRingkasan:\n`;
-      csvContent += `Total Transaksi,${dataToExport.length}\n`;
+      csvContent += `Total Transaksi,"${dataToExport.length}"\n`;
       csvContent += `Total Durasi,"${totalDuration.toFixed(2)} jam"\n`;
       csvContent += `Total Pendapatan,"${totalRevenue}"\n`;
 
@@ -1190,39 +1333,49 @@
     window.REFERENCE_ROOMS = REFERENCE_ROOMS;
 
     // -----------------------------------------------------------------
-    // LOGIKA INISIALISASI (DIPIND_AHKAN KE BAWAH)
+    // LOGIKA INISIALISASI (DIPERBAIKI - Menggunakan token kustom)
     // -----------------------------------------------------------------
     // Bungkus inisialisasi aplikasi di dalam listener auth
     // Ini memastikan kita login SEBELUM mencoba membaca database
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Pengguna berhasil login (termasuk anonim)
+        // Pengguna berhasil login (termasuk anonim atau kustom)
         console.log("Otentikasi berhasil, UID:", user.uid);
         
         // Sekarang aman untuk memanggil initializeAppUI
         // karena sudah pasti terdefinisi
         window.initializeAppUI();
+        
       } else {
         // Pengguna tidak login, coba login
-        console.log("Tidak ada pengguna, mencoba login anonim...");
-        signInAnonymously(auth).catch((error) => {
-          console.error("Anonymous sign-in failed:", error);
+        console.log("Tidak ada pengguna, mencoba login...");
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            // Gunakan token kustom jika tersedia
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            // Fallback ke login anonim jika tidak ada token
+            await signInAnonymously(auth);
+          }
+          // onAuthStateChanged akan dipanggil lagi secara otomatis setelah login berhasil
+        } catch (error) {
+          console.error("Login gagal:", error);
           showToast('Gagal terhubung ke server', 'error');
-        });
+        }
       }
     });
 
   </script>
 </head>
-<body>
-  <div id="app" class="min-h-full"></div>
-  
-  <!-- SCRIPT KEDUA DIHAPUS, KODENYA SUDAH DIGABUNG KE ATAS -->
-  <!-- 
-  <script type="module">
-    // ... semua kode dari skrip kedua ada di sini ...
-  </script>
-  -->
+<body class="antialiased">
+  <div id="app" class="min-h-full">
+    <!-- Konten aplikasi akan dirender di sini oleh renderApp() -->
+    <div class="flex items-center justify-center min-h-screen">
+      <div class="text-center">
+        <div class="text-2xl font-semibold animate-pulse">Memuat Aplikasi...</div>
+        <div class="text-gray-500 mt-2">Menghubungkan ke server...</div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
-
