@@ -145,9 +145,18 @@
 
     // Menggantikan initApp() asli
     async function initializeFirebaseAndAuth() {
-      // Ambil config dari environment
-      const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-      appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      // KONFIGURASI FIREBASE ANDA DIMASUKKAN DI SINI
+      const firebaseConfig = {
+        apiKey: "AIzaSyCjRY87p_EzrxkVB7HG13bozEUnf6C-63Y",
+        authDomain: "rental-manager-a4d21.firebaseapp.com",
+        projectId: "rental-manager-a4d21",
+        storageBucket: "rental-manager-a4d21.firebasestorage.app",
+        messagingSenderId: "759463472912",
+        appId: "1:759463472912:web:f209186894c5fc6cb3ff95",
+        measurementId: "G-704L1DTJKT"
+      };
+      // Kita set appId ke projectId untuk konsistensi
+      appId = firebaseConfig.projectId || 'default-app-id';
 
       if (!firebaseConfig.apiKey) {
         console.error("Firebase config missing!");
@@ -178,13 +187,14 @@
         }
       });
 
-      // Coba login dengan token yang ada
+      // Coba login
       try {
-        if (typeof __initial_auth_token !== 'undefined') {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        // DIMODIFIKASI: Karena kita menggunakan konfigurasi Firebase kustom,
+        // kita tidak boleh menggunakan __initial_auth_token (yang mana
+        // ditujukan untuk project lain).
+        // Kita HARUS login secara anonim ke project kita sendiri.
+        await signInAnonymously(auth);
+        
       } catch (error) {
         console.error("Firebase sign-in failed:", error);
       }
